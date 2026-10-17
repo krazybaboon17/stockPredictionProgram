@@ -79,7 +79,8 @@ function setChartMode(mode) {
     forecast: document.getElementById("modeForecastBtn"),
     compare: document.getElementById("modeCompareBtn"),
     backtest: document.getElementById("modeBacktestBtn"),
-    technical: document.getElementById("modeTechBtn")
+    technical: document.getElementById("modeTechBtn"),
+    portfolio: document.getElementById("modePortfolioBtn")
   };
 
   Object.keys(modes).forEach(k => {
@@ -94,14 +95,23 @@ function setChartMode(mode) {
 
   const volContainer = document.getElementById("volumeSubplotContainer");
   const compareLeaderboard = document.getElementById("compareLeaderboard");
+  const portfolioPanel = document.getElementById("portfolioOptimizerPanel");
 
   if (mode === "compare") {
     if (volContainer) volContainer.classList.add("hidden");
     if (compareLeaderboard) compareLeaderboard.classList.remove("hidden");
+    if (portfolioPanel) portfolioPanel.classList.add("hidden");
     fetchComparison();
+  } else if (mode === "portfolio") {
+    if (volContainer) volContainer.classList.add("hidden");
+    if (compareLeaderboard) compareLeaderboard.classList.add("hidden");
+    if (portfolioPanel) portfolioPanel.classList.remove("hidden");
+    renderPortfolioTickerSelectors();
+    runPortfolioOptimization();
   } else {
     if (volContainer) volContainer.classList.remove("hidden");
     if (compareLeaderboard) compareLeaderboard.classList.add("hidden");
+    if (portfolioPanel) portfolioPanel.classList.add("hidden");
     renderChart();
   }
 }
@@ -785,3 +795,221 @@ function toggleTaskDrawer() {
   const drawer = document.getElementById("taskDrawerModal");
   if (drawer) drawer.classList.toggle("hidden");
 }
+
+// --- Markowitz Portfolio & Efficient Frontier Visualizer (TASK-PM-008) ---
+let selectedPortfolioTickers = ["NVDA", "AAPL", "MSFT", "GOOGL"];
+const AVAILABLE_PORTFOLIO_TICKERS = ["NVDA", "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "META", "SPY"];
+
+function renderPortfolioTickerSelectors() {
+  const container = document.getElementById("portfolioTickerSelectors");
+  if (!container) return;
+  container.innerHTML = "";
+
+  AVAILABLE_PORTFOLIO_TICKERS.forEach(ticker => {
+    const isSelected = selectedPortfolioTickers.includes(ticker);
+    const pill = document.createElement("button");
+    pill.type = "button";
+    pill.textContent = ticker;
+    pill.className = isSelected
+      ? "px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-brand-500/20 text-accent-cyan border border-brand-500/50 shadow-sm shadow-brand-500/20 transition-all"
+      : "px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-surface-900 text-slate-400 border border-surface-800 hover:text-white transition-all";
+    pill.onclick = () => {
+      if (selectedPortfolioTickers.includes(ticker)) {
+        if (selectedPortfolioTickers.length > 2) {
+          selectedPortfolioTickers = selectedPortfolioTickers.filter(t => t !== ticker);
+        } else {
+          alert("At least 2 assets are required for portfolio optimization.");
+          return;
+        }
+      } else {
+        if (selectedPortfolioTickers.length < 8) {
+          selectedPortfolioTickers.push(ticker);
+        }
+      }
+      renderPortfolioTickerSelectors();
+      runPortfolioOptimization();
+    };
+    container.appendChild(pill);
+  });
+}
+
+async function runPortfolioOptimization() {
+  const overlay = document.getElementById("chartLoadingOverlay");
+  if (overlay) overlay.classList.remove("hidden");
+
+  try {
+    const res = await fetch("/api/portfolio/optimize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tickers: selectedPortfolioTickers,
+        horizon: currentHorizon,
+        risk_free_rate: 0.045
+      })
+    });
+    if (!res.ok) throw new Error("Portfolio optimization API failed");
+    const data = await res.json();
+
+    // 1. Update Maximum Sharpe scorecard
+    const maxSharpe = data.max_sharpe || data.optimal_portfolio;
+    if (maxSharpe) {
+      const msVal = document.getElementById("maxSharpeVal");
+      const msRet = document.getElementById("maxSharpeReturn");
+      const msVol = document.getElementById("maxSharpeVol");
+      if (msVal) msVal.textContent = `Sharpe: ${maxSharpe.sharpe_ratio.toFixed(2)}`;
+      if (msRet) msRet.textContent = `${maxSharpe.expected_return_pct >= 0 ? "+" : ""}${maxSharpe.expected_return_pct.toFixed(1)}%`;
+      if (msVol) msVol.textContent = `${maxSharpe.volatility_pct.toFixed(1)}%`;
+      renderWeightBars("maxSharpeWeightsContainer", maxSharpe.weights, "#f59e0b");
+    }
+
+    // 2. Update Minimum Volatility scorecard
+    const minVol = data.min_volatility || data.min_variance_portfolio;
+    if (minVol) {
+      const mvVal = document.getElementById("minVolSharpeVal");
+      const mvRet = document.getElementById("minVolReturn");
+      const mvVol = document.getElementById("minVolVol");
+      if (mvVal) mvVal.textContent = `Sharpe: ${minVol.sharpe_ratio.toFixed(2)}`;
+      if (mvRet) mvRet.textContent = `${minVol.expected_return_pct >= 0 ? "+" : ""}${minVol.expected_return_pct.toFixed(1)}%`;
+      if (mvVol) mvVol.textContent = `${minVol.volatility_pct.toFixed(1)}%`;
+      renderWeightBars("minVolWeightsContainer", minVol.weights, "#06b6d4");
+    }
+
+    // 3. Update Correlation Matrix Table
+    renderCorrelationMatrix(data.correlation_matrix);
+
+    // 4. Render Markowitz Efficient Frontier on main chart canvas
+    renderFrontierChart(data);
+
+  } catch (err) {
+    console.error("Error in portfolio optimization:", err);
+  } finally {
+    if (overlay) overlay.classList.add("hidden");
+  }
+}
+
+function renderWeightBars(containerId, weights, colorHex) {
+  const container = document.getElementById(containerId);
+  if (!container || !weights) return;
+  container.innerHTML = "";
+
+  Object.entries(weights).forEach(([ticker, w]) => {
+    const pct = Math.round(w * 100);
+    const row = document.createElement("div");
+    row.className = "space-y-0.5";
+    row.innerHTML = `
+      <div class="flex justify-between text-[11px] font-mono text-slate-300">
+        <span class="font-bold text-white">${ticker}</span>
+        <span>${pct}%</span>
+      </div>
+      <div class="w-full bg-surface-900 rounded-full h-1.5 overflow-hidden">
+        <div class="h-full rounded-full transition-all duration-500" style="width: ${pct}%; background-color: ${colorHex}"></div>
+      </div>
+    `;
+    container.appendChild(row);
+  });
+}
+
+function renderCorrelationMatrix(corrMap) {
+  const container = document.getElementById("correlationMatrixContainer");
+  if (!container || !corrMap) return;
+  const tickers = Object.keys(corrMap);
+
+  let html = `<table class="w-full text-center border-collapse"><thead><tr class="text-slate-500 border-b border-surface-800"><th class="p-1 text-left">Asset</th>`;
+  tickers.forEach(t => { html += `<th class="p-1">${t}</th>`; });
+  html += `</tr></thead><tbody>`;
+
+  tickers.forEach(t1 => {
+    html += `<tr class="border-b border-surface-850"><td class="p-1 text-left font-bold text-white">${t1}</td>`;
+    tickers.forEach(t2 => {
+      const val = corrMap[t1] ? corrMap[t1][t2] : (t1 === t2 ? 1.0 : 0.0);
+      const isSelf = t1 === t2;
+      const colorClass = isSelf ? "text-slate-500" : (val > 0.5 ? "text-amber-400" : (val < 0.2 ? "text-emerald-400" : "text-slate-300"));
+      html += `<td class="p-1 ${colorClass}">${isSelf ? "1.00" : val.toFixed(2)}</td>`;
+    });
+    html += `</tr>`;
+  });
+  html += `</tbody></table>`;
+  container.innerHTML = html;
+}
+
+function renderFrontierChart(data) {
+  if (!mainChart) return;
+  const frontier = data.frontier || data.frontier_points || [];
+  const maxSharpe = data.max_sharpe || data.optimal_portfolio;
+  const minVol = data.min_volatility || data.min_variance_portfolio;
+  const eqWeight = data.equal_weight || data.equal_weight_portfolio;
+
+  const frontierScatter = frontier.map(p => ({ x: p.volatility_pct, y: p.return_pct }));
+
+  const datasets = [
+    {
+      type: "line",
+      label: "Markowitz Efficient Frontier",
+      data: frontierScatter,
+      borderColor: "#06b6d4",
+      backgroundColor: "rgba(6, 182, 212, 0.1)",
+      borderWidth: 2.5,
+      pointRadius: 3,
+      pointHoverRadius: 6,
+      fill: false,
+      tension: 0.3
+    }
+  ];
+
+  if (maxSharpe) {
+    datasets.push({
+      type: "scatter",
+      label: "★ Maximum Sharpe (Tangency)",
+      data: [{ x: maxSharpe.volatility_pct, y: maxSharpe.expected_return_pct }],
+      backgroundColor: "#f59e0b",
+      borderColor: "#ffffff",
+      borderWidth: 2,
+      pointRadius: 8,
+      pointHoverRadius: 11
+    });
+  }
+
+  if (minVol) {
+    datasets.push({
+      type: "scatter",
+      label: "● Minimum Volatility",
+      data: [{ x: minVol.volatility_pct, y: minVol.expected_return_pct }],
+      backgroundColor: "#10b981",
+      borderColor: "#ffffff",
+      borderWidth: 2,
+      pointRadius: 7,
+      pointHoverRadius: 10
+    });
+  }
+
+  if (eqWeight) {
+    datasets.push({
+      type: "scatter",
+      label: "▲ Equal Weight Benchmark (1/N)",
+      data: [{ x: eqWeight.volatility_pct, y: eqWeight.expected_return_pct }],
+      backgroundColor: "#a855f7",
+      borderColor: "#ffffff",
+      borderWidth: 2,
+      pointRadius: 6,
+      pointHoverRadius: 9
+    });
+  }
+
+  mainChart.data = { datasets: datasets };
+  mainChart.options.scales = {
+    x: {
+      type: "linear",
+      title: { display: true, text: "Annualized Volatility (%)", color: "#94a3b8", font: { family: "JetBrains Mono", size: 11 } },
+      grid: { color: "rgba(51, 65, 85, 0.4)" },
+      ticks: { color: "#94a3b8", font: { family: "JetBrains Mono" } }
+    },
+    y: {
+      type: "linear",
+      title: { display: true, text: "Expected Return (%)", color: "#94a3b8", font: { family: "JetBrains Mono", size: 11 } },
+      grid: { color: "rgba(51, 65, 85, 0.4)" },
+      ticks: { color: "#94a3b8", font: { family: "JetBrains Mono" } }
+    }
+  };
+  mainChart.update();
+}
+

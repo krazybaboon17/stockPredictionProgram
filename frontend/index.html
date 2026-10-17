@@ -212,6 +212,9 @@
               <button onclick="setChartMode('technical')" id="modeTechBtn" class="px-3 py-1 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition-all flex items-center gap-1.5">
                 <i data-lucide="sliders" class="w-3.5 h-3.5"></i> Technicals
               </button>
+              <button onclick="setChartMode('portfolio')" id="modePortfolioBtn" class="px-3 py-1 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition-all flex items-center gap-1.5">
+                <i data-lucide="pie-chart" class="w-3.5 h-3.5"></i> Portfolio
+              </button>
             </div>
           </div>
 
@@ -298,6 +301,82 @@
               <tbody id="compareTableBody" class="divide-y divide-surface-850">
               </tbody>
             </table>
+          </div>
+        </div>
+
+        <!-- Markowitz Portfolio & Efficient Frontier Panel (Shown in portfolio mode) -->
+        <div id="portfolioOptimizerPanel" class="mt-4 p-4 rounded-xl bg-surface-900/90 border border-surface-800 hidden space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-surface-800">
+            <div>
+              <h3 class="text-xs font-mono uppercase tracking-wider text-accent-cyan flex items-center gap-1.5 font-bold">
+                <i data-lucide="pie-chart" class="w-3.5 h-3.5"></i> Markowitz Efficient Frontier & Asset Allocation
+              </h3>
+              <p class="text-[11px] text-slate-400 mt-0.5">Select watchlist assets to solve for the Maximum Sharpe ratio and Minimum Volatility portfolios.</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-slate-400 font-mono">Rf Rate: 4.5%</span>
+              <button onclick="runPortfolioOptimization()" id="runPortfolioBtn" class="px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white font-mono text-xs font-bold transition-all flex items-center gap-1.5">
+                <i data-lucide="play" class="w-3 h-3"></i> Optimize Allocation
+              </button>
+            </div>
+          </div>
+
+          <!-- Multi-Asset Picker Pills -->
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="text-xs text-slate-400 font-mono mr-1">Include Assets:</span>
+            <div id="portfolioTickerSelectors" class="flex flex-wrap gap-2">
+              <!-- Populated dynamically -->
+            </div>
+          </div>
+
+          <!-- Optimization Output Cards Grid -->
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <!-- Optimal Tangency Portfolio (Max Sharpe) -->
+            <div class="p-3.5 rounded-xl bg-surface-950 border border-amber-500/30 space-y-2.5">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-amber-400 font-mono flex items-center gap-1.5">
+                  <span class="w-2.5 h-2.5 rounded-full bg-amber-400 ring-2 ring-amber-400/30"></span> Maximum Sharpe
+                </span>
+                <span id="maxSharpeVal" class="text-xs font-mono font-bold text-white">Sharpe: 0.00</span>
+              </div>
+              <div class="flex justify-between text-xs font-mono text-slate-300">
+                <span>Exp. Return: <strong id="maxSharpeReturn" class="text-emerald-400">+0.0%</strong></span>
+                <span>Volatility: <strong id="maxSharpeVol" class="text-rose-400">0.0%</strong></span>
+              </div>
+              <div id="maxSharpeWeightsContainer" class="space-y-1.5 pt-1">
+                <!-- Weight bars -->
+              </div>
+            </div>
+
+            <!-- Minimum Variance Portfolio -->
+            <div class="p-3.5 rounded-xl bg-surface-950 border border-accent-cyan/30 space-y-2.5">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-accent-cyan font-mono flex items-center gap-1.5">
+                  <span class="w-2.5 h-2.5 rounded-full bg-accent-cyan ring-2 ring-accent-cyan/30"></span> Minimum Volatility
+                </span>
+                <span id="minVolSharpeVal" class="text-xs font-mono font-bold text-white">Sharpe: 0.00</span>
+              </div>
+              <div class="flex justify-between text-xs font-mono text-slate-300">
+                <span>Exp. Return: <strong id="minVolReturn" class="text-emerald-400">+0.0%</strong></span>
+                <span>Volatility: <strong id="minVolVol" class="text-accent-cyan">0.0%</strong></span>
+              </div>
+              <div id="minVolWeightsContainer" class="space-y-1.5 pt-1">
+                <!-- Weight bars -->
+              </div>
+            </div>
+
+            <!-- Pairwise Correlation Matrix -->
+            <div class="p-3.5 rounded-xl bg-surface-950 border border-surface-800 space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-300 font-mono flex items-center gap-1.5">
+                  <i data-lucide="grid" class="w-3.5 h-3.5 text-slate-400"></i> Asset Correlation
+                </span>
+                <span class="text-[10px] font-mono text-slate-500">252D Covariance</span>
+              </div>
+              <div id="correlationMatrixContainer" class="overflow-x-auto text-[11px] font-mono text-slate-300">
+                <!-- Correlation matrix table -->
+              </div>
+            </div>
           </div>
         </div>
       </div>
