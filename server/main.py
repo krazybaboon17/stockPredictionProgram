@@ -364,8 +364,11 @@ async def create_task(req: NewTaskRequest):
     else:
         new_text = text + f"\n\n[NEW TASK - {now_str}]\n" + entry_line
 
-    with open(TASKS_FILE, "w", encoding="utf-8") as f:
-        f.write(new_text)
+    try:
+        with open(TASKS_FILE, "w", encoding="utf-8") as f:
+            f.write(new_text)
+    except (OSError, PermissionError) as e:
+        logger.warning(f"Could not write to TASKS.txt (read-only filesystem): {e}")
 
     return {"success": True, "task_id": task_id, "message": "Task queued successfully."}
 
@@ -391,10 +394,14 @@ async def post_message(req: ChatMessageRequest):
     else:
         new_text = text + entry
 
-    with open(TASKS_FILE, "w", encoding="utf-8") as f:
-        f.write(new_text)
+    try:
+        with open(TASKS_FILE, "w", encoding="utf-8") as f:
+            f.write(new_text)
+    except (OSError, PermissionError) as e:
+        logger.warning(f"Could not write to TASKS.txt (read-only filesystem): {e}")
 
     return {"success": True, "message": "Message logged to TASKS.txt."}
+
 
 
 # --- Static Frontend Mount ---

@@ -22,8 +22,18 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-CACHE_DIR = os.path.join(os.path.dirname(__file__), "..", ".cache", "stocks")
-os.makedirs(CACHE_DIR, exist_ok=True)
+# Use /tmp on serverless read-only environments (e.g. AWS Lambda / Vercel)
+if os.environ.get("VERCEL") or not os.access(os.path.dirname(os.path.dirname(__file__)), os.W_OK):
+    CACHE_DIR = "/tmp/stock_cache"
+else:
+    CACHE_DIR = os.path.join(os.path.dirname(__file__), "..", ".cache", "stocks")
+
+try:
+    os.makedirs(CACHE_DIR, exist_ok=True)
+except (OSError, PermissionError):
+    CACHE_DIR = "/tmp/stock_cache"
+    os.makedirs(CACHE_DIR, exist_ok=True)
+
 
 POPULAR_TICKERS = [
     {"symbol": "NVDA", "name": "NVIDIA Corporation", "sector": "Technology"},
