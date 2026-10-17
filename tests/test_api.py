@@ -125,6 +125,15 @@ class TestAPIEndpoints(unittest.TestCase):
         self.assertEqual(res_root.status_code, 200)
         self.assertIn(b"TimesFM", res_root.content)
 
+        # Verify Vercel __path rewrite extraction mechanism
+        res_path_health = vercel_client.get("/api/index.py?__path=api/health")
+        self.assertEqual(res_path_health.status_code, 200)
+        self.assertEqual(res_path_health.json()["status"], "online")
+
+        res_path_root = vercel_client.get("/api/index.py?__path=")
+        self.assertEqual(res_path_root.status_code, 200)
+        self.assertIn(b"TimesFM", res_path_root.content)
+
     def test_static_direct_routes(self):
         res_css = self.client.get("/styles.css")
         self.assertEqual(res_css.status_code, 200)
