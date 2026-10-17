@@ -933,7 +933,16 @@ function renderCorrelationMatrix(corrMap) {
 }
 
 function renderFrontierChart(data) {
-  if (!mainChart) return;
+  const canvas = document.getElementById("mainChart");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  if (mainChartInstance) mainChartInstance.destroy();
+
+  const titleEl = document.getElementById("chartTitle");
+  const subEl = document.getElementById("chartSubtitle");
+  if (titleEl) titleEl.innerHTML = `<i data-lucide="pie-chart" class="w-4 h-4 text-accent-cyan"></i> Markowitz Efficient Frontier`;
+  if (subEl) subEl.textContent = `Risk-Return Tradeoff • ${selectedPortfolioTickers.join(", ")} (${currentHorizon}D Horizon)`;
+
   const frontier = data.frontier || data.frontier_points || [];
   const maxSharpe = data.max_sharpe || data.optimal_portfolio;
   const minVol = data.min_volatility || data.min_variance_portfolio;
@@ -995,21 +1004,52 @@ function renderFrontierChart(data) {
     });
   }
 
-  mainChart.data = { datasets: datasets };
-  mainChart.options.scales = {
-    x: {
-      type: "linear",
-      title: { display: true, text: "Annualized Volatility (%)", color: "#94a3b8", font: { family: "JetBrains Mono", size: 11 } },
-      grid: { color: "rgba(51, 65, 85, 0.4)" },
-      ticks: { color: "#94a3b8", font: { family: "JetBrains Mono" } }
-    },
-    y: {
-      type: "linear",
-      title: { display: true, text: "Expected Return (%)", color: "#94a3b8", font: { family: "JetBrains Mono", size: 11 } },
-      grid: { color: "rgba(51, 65, 85, 0.4)" },
-      ticks: { color: "#94a3b8", font: { family: "JetBrains Mono" } }
+  mainChartInstance = new Chart(ctx, {
+    type: "scatter",
+    data: { datasets: datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: 'nearest',
+        intersect: false
+      },
+      plugins: {
+        legend: { display: true, labels: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 11 } } },
+        tooltip: {
+          backgroundColor: '#0d111a',
+          titleColor: '#e2e8f0',
+          bodyColor: '#cbd5e1',
+          borderColor: '#2b3952',
+          borderWidth: 1,
+          padding: 10,
+          callbacks: {
+            label: function(context) {
+              const label = context.dataset.label || '';
+              const x = context.parsed.x !== null ? context.parsed.x.toFixed(2) : '0';
+              const y = context.parsed.y !== null ? (context.parsed.y >= 0 ? '+' : '') + context.parsed.y.toFixed(2) : '0';
+              return `${label}: Vol ${x}%, Return ${y}%`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          type: "linear",
+          title: { display: true, text: "Annualized Volatility (%)", color: "#94a3b8", font: { family: "JetBrains Mono", size: 11 } },
+          grid: { color: "rgba(255, 255, 255, 0.04)" },
+          ticks: { color: "#64748b", font: { family: "JetBrains Mono", size: 10 }, callback: v => v.toFixed(1) + '%' }
+        },
+        y: {
+          type: "linear",
+          title: { display: true, text: "Expected Return (%)", color: "#94a3b8", font: { family: "JetBrains Mono", size: 11 } },
+          grid: { color: "rgba(255, 255, 255, 0.04)" },
+          ticks: { color: "#64748b", font: { family: "JetBrains Mono", size: 10 }, callback: v => (v >= 0 ? '+' : '') + v.toFixed(1) + '%' }
+        }
+      }
     }
-  };
-  mainChart.update();
+  });
+
+  if (window.lucide) lucide.createIcons();
 }
 

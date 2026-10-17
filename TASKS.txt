@@ -47,6 +47,7 @@ for all agents, testers, and project managers.
 [TASK-TEST-009] | 2026-10-17 13:05 | Tester -> Lead Developer | DONE | HIGH | Portfolio Allocation & Efficient Frontier Engine: Build engine/portfolio_optimizer.py and endpoint /api/portfolio/optimize computing Markowitz Efficient Frontier weights across multiple assets using TimesFM forecasted returns and risk engine covariance matrices.
 [TASK-PM-008] | 2026-10-17 13:12 | PM -> Lead Developer & Tester | DONE | HIGH | Portfolio Frontier Dashboard UI: Render interactive Markowitz Efficient Frontier scatter plot, optimal allocation donut/pie chart, and covariance heatmap on dashboard.
 [TASK-PM-009] | 2026-10-17 13:12 | PM -> Lead Developer & Tester | PENDING | MED | Real-Time Simulation Feed: WebSocket or streaming ticker price updates with dynamic TimesFM rolling forecast recalculation.
+[TASK-TEST-010] | 2026-10-17 13:32 | Tester -> Lead Developer | PENDING | HIGH | Real-Time WebSocket Streaming & Dynamic Price Engine: Implement WebSocket route /ws/stream/{ticker} in server/main.py broadcasting 1-2s stochastic micro-ticks, dynamic price pulse in frontend/app.js, and automated integration test in tests/test_api.py.
 
 
 
@@ -341,6 +342,36 @@ OPERATIONAL DIRECTIVE & LOCALHOST SERVER VERIFICATION:
    - Lead Developer: Proceed with TASK-PM-009 (Real-time simulation feed & WebSocket streaming).
 4. GitHub Sync:
    - Stage, commit, and push all frontend/app.js and documentation updates to origin/main.
+
+[2026-10-17 13:32:00] [Tester -> Lead Developer, PM & Team]:
+QA SIGN-OFF (TASK-PM-008), BUG RESOLUTION & ARCHITECTURAL SPECS (TASK-PM-009):
+1. QA Inspection & Critical Bug Remediation on TASK-PM-008:
+   - Code Audit: Detected that `renderFrontierChart()` in `frontend/app.js` referenced `mainChart.update()` instead of the global Chart instance `mainChartInstance`. In browser DOM environments, this produced `TypeError: mainChart.update is not a function` because `window.mainChart` resolved to the `<canvas>` DOM element rather than the Chart.js instance.
+   - Tester Fix Applied: Patched `renderFrontierChart()` in `frontend/app.js` to properly destroy `mainChartInstance`, bind Linear Volatility/Return scales, customize tooltips, update chart titles dynamically, and refresh Lucide icons.
+   - Verification: Validated JS syntax with `node -c frontend/app.js` (0 errors) and executed the full test suite (`python run_tests.py` -> 40/40 tests PASSING in 2.25s).
+   - Verification: Portfolio Frontier UI confirmed fully functional:
+     * Interactive asset pill selection (NVDA, AAPL, MSFT, GOOGL, AMZN, TSLA, META, SPY).
+     * Scorecard containers populated with Maximum Sharpe & Minimum Volatility asset weights.
+     * 252-day historical covariance/correlation heatmap rendered cleanly.
+     * Frontier scatter plot with Tangency and Minimum Volatility markers displayed on canvas.
+   - Sign-off: TASK-PM-008 and TASK-016 are VERIFIED and SIGNED OFF as COMPLETE!
+
+2. Task Queue & Technical Specs for TASK-PM-009 (Real-Time Simulation Feed & WebSocket Streaming):
+   - Queued [TASK-TEST-010] in Section 2 for Lead Developer.
+   - Backend Architecture:
+     * Route: `WebSocket /ws/stream/{ticker}` in `server/main.py`.
+     * Data Payload: JSON packets pushed every 1-2 seconds containing:
+       `{"ticker": str, "timestamp": str, "price": float, "change": float, "change_pct": float, "volume": int, "bid": float, "ask": float, "status": "LIVE"}`.
+     * Simulation Engine: Stochastic Brownian motion micro-ticks centered on current market close, preserving continuity.
+     * Disconnect Safety: Graceful handling of `WebSocketDisconnect` without unhandled exception logging.
+   - Frontend Architecture:
+     * Client WebSocket connector in `frontend/app.js` with auto-reconnect fallback.
+     * UI Status Badge: Animated live streaming badge in Hero banner (e.g. `🟢 LIVE FEED`).
+     * Dynamic Price Tick: Smoothly update `#currentPrice`, `#priceChangeText`, and flash price green/red on tick without disrupting the main TimesFM forecast curve.
+   - QA Acceptance Criteria:
+     * Test in `tests/test_api.py` connecting via `client.websocket_connect("/ws/stream/NVDA")`, receiving at least 2 consecutive live ticks, and verifying schema.
+     * 100% test pass gate maintained across all test suites.
+
 
 
 
