@@ -15,29 +15,38 @@ if ROOT_DIR not in sys.path:
 from server.main import app as fastapi_app
 
 
+import urllib.parse
+
+
 class VercelASGIApp:
-    """ASGI wrapper that normalizes rewritten paths using Vercel edge headers."""
+    """ASGI wrapper that normalizes rewritten paths for Vercel Serverless Functions."""
 
     def __init__(self, inner_app):
         self.inner_app = inner_app
 
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http":
-            headers = dict(scope.get("headers", []))
-            # Check for original request path from Vercel edge proxy
-            matched = headers.get(b"x-matched-path", b"").decode("utf-8")
-            if not matched:
-                matched = headers.get(b"x-vercel-matched-path", b"").decode("utf-8")
+            query_bytes = scope.get("query_string", b"")
+            query_str = query_bytes.decode("utf-8", errors="ignore")
+            params = urllib.parse.parse_qs(query_str)
 
-            if matched:
-                # Remove query parameters if present in matched path
-                scope["path"] = matched.split("?")[0]
+            if "__path" in params and params["__path"]:
+                orig_path = params["__path"][0]
+                scope["path"] = "/" + orig_path.lstrip("/")
+                # Clean __path query param from query_string
+                clean_params = {k: v for k, v in params.items() if k != "__path"}
+                scope["query_string"] = urllib.parse.urlencode(clean_params, doseq=True).encode("utf-8")
             else:
-                path = scope.get("path", "")
-                if path in ("/api/index.py", "/api/index.py/"):
-                    scope["path"] = "/"
-                elif path.startswith("/api/index.py/"):
-                    scope["path"] = path[len("/api/index.py"):]
+                headers = dict(scope.get("headers", []))
+                matched = headers.get(b"x-matched-path", b"").decode("utf-8", errors="ignore")
+                if matched and not matched.startswith("/api/index.py"):
+                    scope["path"] = matched.split("?")[0]
+                else:
+                    path = scope.get("path", "")
+                    if path in ("/api/index.py", "/api/index.py/"):
+                        scope["path"] = "/"
+                    elif path.startswith("/api/index.py/"):
+                        scope["path"] = path[len("/api/index.py"):]
 
         await self.inner_app(scope, receive, send)
 

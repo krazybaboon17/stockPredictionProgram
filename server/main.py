@@ -80,7 +80,7 @@ class ChatMessageRequest(BaseModel):
 
 
 # --- API Endpoints ---
-@app.get("/api/health")
+@app.api_route("/api/health", methods=["GET", "HEAD"])
 async def health_check():
     return {
         "status": "online",
@@ -456,21 +456,21 @@ FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
 if os.path.exists(FRONTEND_DIR):
     app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
-    @app.get("/")
+    @app.api_route("/", methods=["GET", "HEAD"])
     async def serve_index():
         index_file = os.path.join(FRONTEND_DIR, "index.html")
         if os.path.exists(index_file):
             return FileResponse(index_file)
         return JSONResponse({"status": "Frontend building..."})
 
-    @app.get("/styles.css")
+    @app.api_route("/styles.css", methods=["GET", "HEAD"])
     async def serve_styles():
         css_file = os.path.join(FRONTEND_DIR, "styles.css")
         if os.path.exists(css_file):
             return FileResponse(css_file, media_type="text/css")
         raise HTTPException(status_code=404, detail="styles.css not found")
 
-    @app.get("/app.js")
+    @app.api_route("/app.js", methods=["GET", "HEAD"])
     async def serve_js():
         js_file = os.path.join(FRONTEND_DIR, "app.js")
         if os.path.exists(js_file):
