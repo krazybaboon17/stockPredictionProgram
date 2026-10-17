@@ -4,8 +4,15 @@ Automated Test Runner for Stock Prediction Platform.
 Runs all unit and integration test suites.
 """
 
+import os
 import sys
 import unittest
+
+# Auto-activate local .venv if available and not already in virtualenv
+venv_python = os.path.join(os.path.dirname(__file__), ".venv", "bin", "python")
+if os.path.exists(venv_python) and sys.executable != venv_python and "VIRTUAL_ENV" not in os.environ:
+    os.execv(venv_python, [venv_python] + sys.argv)
+
 
 def main():
     print("=" * 70)

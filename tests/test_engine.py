@@ -94,5 +94,24 @@ class TestTimesFMForecaster(unittest.TestCase):
         self.assertGreaterEqual(bt["mae"], 0.0)
 
 
+class TestRiskEngine(unittest.TestCase):
+    def test_calculate_risk_metrics(self):
+        from engine.risk_engine import RiskEngine
+        current_price = 150.0
+        hist_prices = [140.0 + i * 0.2 for i in range(50)]
+        forecast_predictions = [
+            {"date": f"2026-11-{i+1:02d}", "predicted": 150.0 + i * 0.5, "q10": 145.0 + i * 0.3}
+            for i in range(14)
+        ]
+        metrics = RiskEngine.calculate_risk_metrics(current_price, hist_prices, forecast_predictions)
+        self.assertIn("var_95_pct", metrics)
+        self.assertIn("cvar_95_pct", metrics)
+        self.assertIn("sharpe_ratio", metrics)
+        self.assertIn("risk_tier", metrics)
+        self.assertTrue(metrics["var_95_pct"] >= 0)
+        self.assertTrue(metrics["cvar_95_pct"] >= metrics["var_95_pct"])
+
+
 if __name__ == "__main__":
     unittest.main()
+

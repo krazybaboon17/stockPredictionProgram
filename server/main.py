@@ -7,12 +7,13 @@ and real-time agent task coordination.
 import os
 import sys
 import logging
+import datetime
 from typing import Optional, List
 from pydantic import BaseModel, Field
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 
 # Add parent dir to sys.path
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -21,6 +22,7 @@ if BASE_DIR not in sys.path:
 
 from engine.data_loader import StockDataEngine, POPULAR_TICKERS
 from engine.model_wrapper import TimesFMForecaster
+from engine.risk_engine import RiskEngine
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("server")
@@ -52,6 +54,11 @@ class PredictRequest(BaseModel):
     ticker: str = Field(..., example="NVDA")
     horizon: int = Field(30, ge=1, le=90, description="Forecast horizon in trading days")
     period: str = Field("2y", description="Historical period for context window")
+
+class CompareRequest(BaseModel):
+    tickers: List[str] = Field(..., min_length=1, max_length=8, description="List of tickers to compare")
+    horizon: int = Field(30, ge=1, le=90, description="Forecast horizon in trading days")
+    period: str = Field("2y", description="Historical period")
 
 class BacktestRequest(BaseModel):
     ticker: str = Field(..., example="NVDA")
@@ -160,7 +167,171 @@ async def backtest_stock(req: BacktestRequest):
         logger.error(f"Backtest error for {req.ticker}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/predict/compare")
+async def compare_predictions(req: CompareRequest):
+    """Generates comparative multi-ticker TimesFM forecasts with normalized % return trajectories."""
+    if not req.tickers:
+        raise HTTPException(status_code=400, detail="Must supply at least one ticker.")
+
+    results = []
+    dates = []
+    for ticker in req.tickers:
+        cleaned = ticker.strip().upper()
+        if not cleaned:
+            continue
+        try:
+            stock_data = data_engine.get_stock_data(cleaned, period=req.period)
+            history = stock_data.get("history", [])
+            if not history:
+                continue
+            prices = [h["close"] for h in history]
+            last_date = history[-1]["date"]
+            start_price = prices[-1]
+
+            forecast = forecaster.forecast_series(
+                prices=prices,
+                horizon=req.horizon,
+                start_date_str=last_date
+            )
+            if not dates and forecast.get("predictions"):
+                dates = [p["date"] for p in forecast["predictions"]]
+
+            normalized_pct = []
+            for p in forecast.get("predictions", []):
+                pct = round(((p["predicted"] - start_price) / start_price) * 100, 2)
+                normalized_pct.append(pct)
+
+            target_price = forecast.get("predicted_end_price", start_price)
+            exp_return = round(((target_price - start_price) / start_price) * 100, 2)
+
+            results.append({
+                "ticker": cleaned,
+                "name": stock_data.get("name", cleaned),
+                "sector": stock_data.get("sector", "Equity"),
+                "start_price": round(float(start_price), 2),
+                "predicted_end_price": round(float(target_price), 2),
+                "expected_return_pct": exp_return,
+                "trend": forecast.get("trend", "NEUTRAL"),
+                "normalized_pct_trajectory": normalized_pct,
+                "predictions": forecast.get("predictions", [])
+            })
+        except Exception as e:
+            logger.warning(f"Error computing comparative forecast for {cleaned}: {e}")
+
+    # Sort descending by expected return
+    results.sort(key=lambda x: x["expected_return_pct"], reverse=True)
+
+    return {
+        "horizon": req.horizon,
+        "dates": dates,
+        "comparisons": results
+    }
+
+@app.get("/api/export/{ticker}")
+async def export_forecast(
+    ticker: str,
+    format: str = Query("csv", pattern="^(csv|json)$"),
+    horizon: int = Query(30, ge=1, le=90),
+    period: str = Query("2y")
+):
+    """Exports TimesFM historical and forecast data as CSV or JSON."""
+    cleaned = (ticker or "").strip().upper()
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="Ticker symbol cannot be empty.")
+
+    stock_data = data_engine.get_stock_data(cleaned, period=period)
+    history = stock_data.get("history", [])
+    if not history:
+        raise HTTPException(status_code=404, detail=f"No data for {cleaned}")
+
+    prices = [h["close"] for h in history]
+    last_date = history[-1]["date"]
+    forecast = forecaster.forecast_series(prices, horizon=horizon, start_date_str=last_date)
+
+    if format == "json":
+        payload = {
+            "ticker": cleaned,
+            "name": stock_data.get("name", cleaned),
+            "exported_at": str(datetime.datetime.now().isoformat()) if "datetime" in globals() else "",
+            "model": forecast.get("model"),
+            "current_price": stock_data.get("current_price"),
+            "horizon_days": horizon,
+            "forecast": forecast.get("predictions", []),
+            "history_last_60": history[-60:]
+        }
+        return JSONResponse(
+            content=payload,
+            headers={"Content-Disposition": f"attachment; filename={cleaned}_timesfm_forecast.json"}
+        )
+
+    # CSV Format
+    import csv
+    import io
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Date", "Ticker", "Type", "Close_or_Predicted", "Q10", "Q25", "Q50_Median", "Q75", "Q90", "SMA_20", "RSI"])
+
+    # Write recent historical points
+    for h in history[-60:]:
+        writer.writerow([
+            h["date"], cleaned, "HISTORICAL", h["close"],
+            "", "", "", "", "",
+            h.get("sma_20", ""), h.get("rsi", "")
+        ])
+
+    # Write forecast rows
+    for p in forecast.get("predictions", []):
+        writer.writerow([
+            p["date"], cleaned, "TIMESFM_FORECAST", p["predicted"],
+            p["q10"], p["q25"], p["q50"], p["q75"], p["q90"],
+            "", ""
+        ])
+
+    csv_data = output.getvalue()
+    return Response(
+        content=csv_data,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={cleaned}_timesfm_forecast.csv"}
+    )
+
+
+@app.get("/api/risk/{ticker}")
+async def get_risk_evaluation(
+    ticker: str,
+    horizon: int = Query(30, ge=1, le=90),
+    period: str = Query("2y")
+):
+    """Calculates Value-at-Risk (VaR), Expected Shortfall, and downside metrics."""
+    cleaned = (ticker or "").strip().upper()
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="Ticker symbol cannot be empty.")
+
+    stock_data = data_engine.get_stock_data(cleaned, period=period)
+    history = stock_data.get("history", [])
+    if not history:
+        raise HTTPException(status_code=404, detail=f"No data for {cleaned}")
+
+    prices = [h["close"] for h in history]
+    last_date = history[-1]["date"]
+    current_price = float(stock_data.get("current_price", prices[-1]))
+
+    forecast = forecaster.forecast_series(prices, horizon=horizon, start_date_str=last_date)
+    risk_metrics = RiskEngine.calculate_risk_metrics(
+        current_price=current_price,
+        historical_prices=prices,
+        forecast_predictions=forecast.get("predictions", [])
+    )
+
+    return {
+        "ticker": cleaned,
+        "name": stock_data.get("name", cleaned),
+        "current_price": current_price,
+        "risk_metrics": risk_metrics
+    }
+
+
 @app.get("/api/tasks")
+
 async def get_tasks():
     """Reads TASKS.txt for real-time agent coordination."""
     if not os.path.exists(TASKS_FILE):

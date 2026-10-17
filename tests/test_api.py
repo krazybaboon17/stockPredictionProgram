@@ -64,6 +64,41 @@ class TestAPIEndpoints(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertIn(b"TimesFM", res.content)
 
+    def test_compare_predictions_endpoint(self):
+        res = self.client.post("/api/predict/compare", json={"tickers": ["NVDA", "AAPL"], "horizon": 14})
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data["horizon"], 14)
+        self.assertIn("comparisons", data)
+        self.assertEqual(len(data["comparisons"]), 2)
+        for comp in data["comparisons"]:
+            self.assertIn("normalized_pct_trajectory", comp)
+            self.assertIn("expected_return_pct", comp)
+
+    def test_export_endpoints(self):
+        # CSV Export
+        res_csv = self.client.get("/api/export/AAPL?format=csv&horizon=14")
+        self.assertEqual(res_csv.status_code, 200)
+        self.assertIn("text/csv", res_csv.headers.get("content-type", ""))
+        self.assertIn("Date,Ticker,Type", res_csv.text)
+
+        # JSON Export
+        res_json = self.client.get("/api/export/AAPL?format=json&horizon=14")
+        self.assertEqual(res_json.status_code, 200)
+        json_data = res_json.json()
+        self.assertEqual(json_data["ticker"], "AAPL")
+        self.assertIn("forecast", json_data)
+
+    def test_risk_endpoint(self):
+        res = self.client.get("/api/risk/NVDA?horizon=14")
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data["ticker"], "NVDA")
+        self.assertIn("risk_metrics", data)
+        self.assertIn("var_95_pct", data["risk_metrics"])
+        self.assertIn("risk_tier", data["risk_metrics"])
+
 
 if __name__ == "__main__":
     unittest.main()
+

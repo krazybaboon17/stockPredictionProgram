@@ -202,8 +202,11 @@
               <button onclick="setChartMode('forecast')" id="modeForecastBtn" class="px-3 py-1 rounded-lg text-xs font-medium bg-brand-600 text-white transition-all flex items-center gap-1.5">
                 <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> Forecast Cone
               </button>
+              <button onclick="setChartMode('compare')" id="modeCompareBtn" class="px-3 py-1 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition-all flex items-center gap-1.5">
+                <i data-lucide="layers" class="w-3.5 h-3.5"></i> Compare
+              </button>
               <button onclick="setChartMode('backtest')" id="modeBacktestBtn" class="px-3 py-1 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition-all flex items-center gap-1.5">
-                <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> Backtest Evaluation
+                <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> Backtest
               </button>
               <button onclick="setChartMode('technical')" id="modeTechBtn" class="px-3 py-1 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition-all flex items-center gap-1.5">
                 <i data-lucide="sliders" class="w-3.5 h-3.5"></i> Technicals
@@ -211,19 +214,32 @@
             </div>
           </div>
 
+          <!-- Export Actions -->
+          <div class="flex items-center gap-1.5">
+            <span class="text-xs text-slate-400 font-medium flex items-center gap-1 mr-1">
+              <i data-lucide="download" class="w-3 h-3 text-slate-400"></i> Export:
+            </span>
+            <button onclick="exportData('csv')" title="Export Forecast as CSV" class="px-2.5 py-1 rounded-lg bg-surface-900 hover:bg-surface-850 border border-surface-700 hover:border-slate-500 text-xs text-slate-300 font-mono transition-all flex items-center gap-1">
+              <span>CSV</span>
+            </button>
+            <button onclick="exportData('json')" title="Export Forecast as JSON" class="px-2.5 py-1 rounded-lg bg-surface-900 hover:bg-surface-850 border border-surface-700 hover:border-slate-500 text-xs text-slate-300 font-mono transition-all flex items-center gap-1">
+              <span>JSON</span>
+            </button>
+          </div>
+
           <!-- Indicator Toggles -->
           <div class="flex items-center gap-2 text-xs font-mono">
             <label class="flex items-center gap-1.5 cursor-pointer text-slate-400 hover:text-slate-200">
               <input type="checkbox" id="toggleSMA" checked onchange="updateChartVisibility()" class="rounded bg-surface-800 border-surface-700 text-brand-500 focus:ring-0">
-              <span>SMA (20/50)</span>
+              <span>SMA</span>
             </label>
             <label class="flex items-center gap-1.5 cursor-pointer text-slate-400 hover:text-slate-200 ml-2">
               <input type="checkbox" id="toggleBB" checked onchange="updateChartVisibility()" class="rounded bg-surface-800 border-surface-700 text-brand-500 focus:ring-0">
-              <span>Bollinger Bands</span>
+              <span>BB</span>
             </label>
             <label class="flex items-center gap-1.5 cursor-pointer text-slate-400 hover:text-slate-200 ml-2">
               <input type="checkbox" id="toggleQuantiles" checked onchange="updateChartVisibility()" class="rounded bg-surface-800 border-surface-700 text-brand-500 focus:ring-0">
-              <span>Quantile Cone (10-90%)</span>
+              <span>Quantiles (10-90%)</span>
             </label>
           </div>
         </div>
@@ -256,16 +272,39 @@
         </div>
 
         <!-- Chart Bottom Volume Subplot -->
-        <div class="relative h-[90px] w-full mt-4 pt-3 border-t border-surface-800/80">
+        <div id="volumeSubplotContainer" class="relative h-[90px] w-full mt-4 pt-3 border-t border-surface-800/80">
           <div class="text-[10px] text-slate-500 font-mono uppercase mb-1">Volume Profile</div>
           <canvas id="volumeChart"></canvas>
         </div>
+
+        <!-- Comparative Leaderboard (Visible in compare mode) -->
+        <div id="compareLeaderboard" class="mt-4 pt-4 border-t border-surface-800/80 hidden">
+          <div class="text-xs font-mono uppercase text-slate-400 mb-3 flex items-center justify-between">
+            <span class="flex items-center gap-1.5"><i data-lucide="award" class="w-3.5 h-3.5 text-accent-cyan"></i> TimesFM Multi-Asset Projected Returns Ranking</span>
+            <span class="text-[10px] text-slate-500">Normalized % Gain/Loss</span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs font-mono text-left">
+              <thead>
+                <tr class="text-slate-500 border-b border-surface-800">
+                  <th class="py-1.5 px-3">Asset</th>
+                  <th class="py-1.5 px-3">Start Price</th>
+                  <th class="py-1.5 px-3">TimesFM Target</th>
+                  <th class="py-1.5 px-3">Expected Return</th>
+                  <th class="py-1.5 px-3">Trajectory Trend</th>
+                </tr>
+              </thead>
+              <tbody id="compareTableBody" class="divide-y divide-surface-850">
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
-      <!-- Bottom 3 Performance & Diagnostic Cards -->
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
 
         <!-- Card 1: Quantile Uncertainty Breakdown -->
+
         <div class="glass-panel rounded-2xl p-5 space-y-3">
           <div class="flex items-center justify-between">
             <h3 class="text-xs font-mono uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
@@ -368,8 +407,37 @@
           </div>
         </div>
 
+        <!-- Card 4: Value-at-Risk & Downside Analytics -->
+        <div class="glass-panel rounded-2xl p-5 space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="text-xs font-mono uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <i data-lucide="alert-triangle" class="w-3.5 h-3.5 text-accent-rose"></i> Risk & VaR Analytics
+            </h3>
+            <span id="riskTierBadge" class="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">LOW RISK</span>
+          </div>
+          <div class="space-y-2 text-xs font-mono">
+            <div class="flex justify-between items-center p-2 rounded-lg bg-surface-900/60 border border-surface-800">
+              <span class="text-rose-400">95% Value-at-Risk (VaR)</span>
+              <span id="metricVaR95" class="font-bold text-white">0.0% ($0.00)</span>
+            </div>
+            <div class="flex justify-between items-center p-2 rounded-lg bg-surface-900/40 border border-surface-800/60">
+              <span class="text-rose-300">Expected Shortfall (CVaR)</span>
+              <span id="metricCVaR95" class="font-bold text-slate-200">0.0% ($0.00)</span>
+            </div>
+            <div class="flex justify-between items-center p-2 rounded-lg bg-surface-900/40 border border-surface-800/60">
+              <span class="text-slate-300">Annual Volatility</span>
+              <span id="metricAnnualVol" class="font-bold text-accent-cyan">0.0%</span>
+            </div>
+            <div class="flex justify-between items-center p-2 rounded-lg bg-surface-900/40 border border-surface-800/60">
+              <span class="text-slate-300">Projected Sharpe</span>
+              <span id="metricSharpe" class="font-bold text-accent-emerald">0.00</span>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
+
 
     <!-- Right 1 Column: Fundamental Stats, Model Architecture & Live Multi-Agent Tasks -->
     <div class="space-y-6">
@@ -396,9 +464,26 @@
             <span class="text-slate-400">52-Week Low</span>
             <span id="stat52Low" class="font-semibold text-rose-400">--</span>
           </div>
+      <!-- Risk Engine Card -->
+      <div class="glass-panel rounded-2xl p-5 space-y-4">
+        <div class="flex items-center justify-between">
+          <h3 class="text-xs font-mono uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+            <i data-lucide="shield" class="w-3.5 h-3.5 text-rose-400"></i> TimesFM Downside & Risk
+          </h3>
+          <span id="metricRiskTier" class="font-mono font-bold text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">LOW RISK</span>
+        </div>
+        <div class="space-y-2.5 text-xs font-mono">
           <div class="flex justify-between py-1 border-b border-surface-800/80">
-            <span class="text-slate-400">Data Points Analyzed</span>
-            <span id="statPoints" class="font-semibold text-accent-cyan">--</span>
+            <span class="text-slate-400">VaR (95% Confidence)</span>
+            <span id="metricVaR95" class="font-semibold text-rose-400">--</span>
+          </div>
+          <div class="flex justify-between py-1 border-b border-surface-800/80">
+            <span class="text-slate-400">Expected Shortfall (CVaR)</span>
+            <span id="metricCVaR95" class="font-semibold text-rose-300">--</span>
+          </div>
+          <div class="flex justify-between py-1 border-b border-surface-800/80">
+            <span class="text-slate-400">TimesFM Sharpe Ratio</span>
+            <span id="metricSharpe" class="font-semibold text-accent-cyan">--</span>
           </div>
         </div>
       </div>

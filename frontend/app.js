@@ -9,8 +9,11 @@ let currentChartMode = "forecast"; // "forecast", "backtest", "technical"
 let currentStockData = null;
 let currentForecastData = null;
 let currentBacktestData = null;
+let currentCompareData = null;
+let currentRiskData = null;
 
 let mainChartInstance = null;
+
 let volumeChartInstance = null;
 
 const POPULAR_WATCHLIST = ["NVDA", "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "SPY", "QQQ"];
@@ -65,12 +68,16 @@ function setHorizon(days) {
   document.getElementById("targetHorizonDays").textContent = `${days} Days`;
   document.getElementById("quantileHorizonDay").textContent = `${days}`;
   fetchPrediction();
+  fetchRiskMetrics();
 }
+
+
 
 function setChartMode(mode) {
   currentChartMode = mode;
   const modes = {
     forecast: document.getElementById("modeForecastBtn"),
+    compare: document.getElementById("modeCompareBtn"),
     backtest: document.getElementById("modeBacktestBtn"),
     technical: document.getElementById("modeTechBtn")
   };
@@ -85,7 +92,71 @@ function setChartMode(mode) {
     }
   });
 
-  renderChart();
+  const volContainer = document.getElementById("volumeSubplotContainer");
+  const compareLeaderboard = document.getElementById("compareLeaderboard");
+
+  if (mode === "compare") {
+    if (volContainer) volContainer.classList.add("hidden");
+    if (compareLeaderboard) compareLeaderboard.classList.remove("hidden");
+    fetchComparison();
+  } else {
+    if (volContainer) volContainer.classList.remove("hidden");
+    if (compareLeaderboard) compareLeaderboard.classList.add("hidden");
+    renderChart();
+  }
+}
+
+function exportData(format) {
+  const url = `/api/export/${currentTicker}?format=${format}&horizon=${currentHorizon}&period=${currentPeriod}`;
+  window.open(url, "_blank");
+}
+
+async function fetchComparison() {
+  const overlay = document.getElementById("chartLoadingOverlay");
+  if (overlay) overlay.classList.remove("hidden");
+
+  try {
+    const res = await fetch("/api/predict/compare", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tickers: ["NVDA", "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA"],
+        horizon: currentHorizon,
+        period: currentPeriod
+      })
+    });
+    if (!res.ok) throw new Error("Comparative forecast request failed");
+    currentCompareData = await res.json();
+
+    const tbody = document.getElementById("compareTableBody");
+    if (tbody && currentCompareData.comparisons) {
+      tbody.innerHTML = currentCompareData.comparisons.map((c, i) => `
+        <tr class="hover:bg-surface-800/40 transition-colors">
+          <td class="py-2.5 px-3 font-bold text-white flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full ${i === 0 ? 'bg-amber-400 ring-2 ring-amber-400/30' : 'bg-slate-500'}"></span>
+            <span>${c.ticker}</span>
+            <span class="text-[10px] text-slate-400 font-normal">(${c.name})</span>
+          </td>
+          <td class="py-2.5 px-3 text-slate-300 font-mono">$${c.start_price.toFixed(2)}</td>
+          <td class="py-2.5 px-3 font-semibold text-accent-cyan font-mono">$${c.predicted_end_price.toFixed(2)}</td>
+          <td class="py-2.5 px-3 font-bold font-mono ${c.expected_return_pct >= 0 ? 'text-emerald-400' : 'text-rose-400'}">
+            ${c.expected_return_pct >= 0 ? '+' : ''}${c.expected_return_pct.toFixed(2)}%
+          </td>
+          <td class="py-2.5 px-3">
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold font-mono ${c.trend === 'BULLISH' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : (c.trend === 'BEARISH' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30' : 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30')}">
+              ${c.trend}
+            </span>
+          </td>
+        </tr>
+      `).join("");
+    }
+    renderChart();
+  } catch (err) {
+    console.error("Comparison fetch failed:", err);
+  } finally {
+    if (overlay) overlay.classList.add("hidden");
+    lucide.createIcons();
+  }
 }
 
 async function loadStock(ticker, forceRefresh = false) {
@@ -131,10 +202,11 @@ async function loadStock(ticker, forceRefresh = false) {
     document.getElementById("stat52Low").textContent = currentStockData.week_52_low ? `$${currentStockData.week_52_low.toFixed(2)}` : '--';
     document.getElementById("statPoints").textContent = currentStockData.data_points || '--';
 
-    // Fetch TimesFM Forecast & Backtest concurrently
+    // Fetch TimesFM Forecast, Backtest & Risk Metrics concurrently
     await Promise.all([
       fetchPrediction(),
-      fetchBacktest()
+      fetchBacktest(),
+      fetchRiskMetrics()
     ]);
 
   } catch (err) {
@@ -207,6 +279,34 @@ async function fetchBacktest() {
     document.getElementById("metricDirAcc").textContent = `${currentBacktestData.directional_accuracy_pct.toFixed(1)}%`;
   } catch (e) {
     console.error("Backtest fetch error:", e);
+  }
+}
+
+async function fetchRiskMetrics() {
+  try {
+    const res = await fetch(`/api/risk/${currentTicker}?horizon=${currentHorizon}&period=${currentPeriod}`);
+    if (!res.ok) return;
+    const json = await res.json();
+    const risk = json.risk_metrics;
+    if (!risk) return;
+
+    const var95El = document.getElementById("metricVaR95");
+    const cvar95El = document.getElementById("metricCVaR95");
+    const volEl = document.getElementById("metricAnnualVol");
+    const sharpeEl = document.getElementById("metricSharpe");
+    const riskTierEl = document.getElementById("metricRiskTier") || document.getElementById("riskTierBadge");
+
+    if (var95El) var95El.textContent = `${risk.var_95_pct}% ($${risk.var_95_amount.toFixed(2)})`;
+    if (cvar95El) cvar95El.textContent = `${risk.cvar_95_pct}% ($${risk.cvar_95_amount.toFixed(2)})`;
+    if (volEl) volEl.textContent = `${risk.annualized_volatility_pct}%`;
+    if (sharpeEl) sharpeEl.textContent = `${risk.sharpe_ratio >= 0 ? '+' : ''}${risk.sharpe_ratio.toFixed(2)}`;
+    if (riskTierEl) {
+      riskTierEl.textContent = risk.risk_tier;
+      riskTierEl.className = `font-mono font-bold text-[10px] px-2 py-0.5 rounded bg-${risk.risk_color}-500/10 text-${risk.risk_color}-400 border border-${risk.risk_color}-500/30`;
+    }
+
+  } catch (e) {
+    console.error("Risk metrics error:", e);
   }
 }
 
@@ -470,11 +570,37 @@ function renderChart() {
       borderWidth: 1,
       pointRadius: 0
     });
+  } else if (currentChartMode === "compare") {
+    document.getElementById("chartTitle").innerHTML = `<i data-lucide="layers" class="w-4 h-4 text-cyan-400"></i> TimesFM Multi-Asset Normalized Return Forecast (%)`;
+    document.getElementById("chartSubtitle").textContent = `Comparison baseline normalized to 0.0% at Day 0 • Horizon: ${currentHorizon} Days`;
+
+    if (currentCompareData && currentCompareData.comparisons && currentCompareData.comparisons.length > 0) {
+      allLabels = ["Today", ...currentCompareData.dates];
+      const palette = ["#06b6d4", "#10b981", "#f59e0b", "#a855f7", "#f43f5e", "#3b82f6", "#ec4899", "#84cc16"];
+
+      currentCompareData.comparisons.forEach((item, idx) => {
+        const color = palette[idx % palette.length];
+        const trajectory = [0.0, ...item.normalized_pct_trajectory];
+        const isUp = item.expected_return_pct >= 0;
+        datasets.push({
+          label: `${item.ticker} (${isUp ? '+' : ''}${item.expected_return_pct.toFixed(1)}%)`,
+          data: trajectory,
+          borderColor: color,
+          backgroundColor: color,
+          borderWidth: 2,
+          pointRadius: 2,
+          pointHoverRadius: 5,
+          tension: 0.2
+        });
+      });
+    }
   }
 
   // Draw Main Chart
   const ctx = document.getElementById("mainChart").getContext("2d");
   if (mainChartInstance) mainChartInstance.destroy();
+
+  const isCompareMode = currentChartMode === "compare";
 
   mainChartInstance = new Chart(ctx, {
     type: 'line',
@@ -490,7 +616,7 @@ function renderChart() {
         intersect: false,
       },
       plugins: {
-        legend: { display: false },
+        legend: { display: isCompareMode, labels: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 11 } } },
         tooltip: {
           backgroundColor: '#0d111a',
           titleColor: '#e2e8f0',
@@ -504,7 +630,11 @@ function renderChart() {
               let label = context.dataset.label || '';
               if (label) label += ': ';
               if (context.parsed.y !== null) {
-                label += '$' + context.parsed.y.toFixed(2);
+                if (isCompareMode) {
+                  label += (context.parsed.y >= 0 ? '+' : '') + context.parsed.y.toFixed(2) + '%';
+                } else {
+                  label += '$' + context.parsed.y.toFixed(2);
+                }
               }
               return label;
             }
@@ -526,7 +656,7 @@ function renderChart() {
           ticks: {
             color: '#64748b',
             font: { family: 'JetBrains Mono', size: 10 },
-            callback: value => '$' + value.toFixed(1)
+            callback: value => isCompareMode ? (value >= 0 ? '+' : '') + value.toFixed(1) + '%' : '$' + value.toFixed(1)
           }
         }
       }
