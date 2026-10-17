@@ -22,18 +22,36 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# Use /tmp on serverless read-only environments (e.g. AWS Lambda / Vercel)
-if os.environ.get("VERCEL") or not os.access(os.path.dirname(os.path.dirname(__file__)), os.W_OK):
-    CACHE_DIR = "/tmp/stock_cache"
-else:
-    CACHE_DIR = os.path.join(os.path.dirname(__file__), "..", ".cache", "stocks")
+# Resilient cache directory resolution for serverless (Vercel, AWS Lambda) and read-only runtimes
+def _resolve_cache_dir() -> Optional[str]:
+    candidates = []
+    if os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+        candidates.append("/tmp/stock_cache")
+    candidates.append(os.path.join(os.path.dirname(__file__), "..", ".cache", "stocks"))
+    candidates.append("/tmp/stock_cache")
 
-try:
-    os.makedirs(CACHE_DIR, exist_ok=True)
-except (OSError, PermissionError):
-    CACHE_DIR = "/tmp/stock_cache"
-    os.makedirs(CACHE_DIR, exist_ok=True)
+    for path in candidates:
+        try:
+            os.makedirs(path, exist_ok=True)
+            test_file = os.path.join(path, ".probe")
+            with open(test_file, "w") as f:
+                f.write("1")
+            os.remove(test_file)
+            return path
+        except (OSError, PermissionError):
+            continue
+    return None
 
+
+CACHE_DIR = _resolve_cache_dir()
+
+# Configure yfinance cache location to /tmp to prevent read-only directory issues in serverless
+if yf is not None:
+    try:
+        if hasattr(yf, "set_tz_cache_location"):
+            yf.set_tz_cache_location(os.path.join("/tmp", "py-yfinance"))
+    except Exception as e:
+        logger.debug(f"Could not set yfinance cache location: {e}")
 
 POPULAR_TICKERS = [
     {"symbol": "NVDA", "name": "NVIDIA Corporation", "sector": "Technology"},
@@ -48,10 +66,14 @@ POPULAR_TICKERS = [
 
 
 class StockDataEngine:
+    _mem_cache: Dict[str, Dict[str, Any]] = {}
+
     def __init__(self, cache_ttl_seconds: int = 1800):
         self.cache_ttl = cache_ttl_seconds
 
-    def _get_cache_path(self, ticker: str, period: str, interval: str) -> str:
+    def _get_cache_path(self, ticker: str, period: str, interval: str) -> Optional[str]:
+        if not CACHE_DIR:
+            return None
         safe_ticker = ticker.upper().replace("/", "_").replace("^", "IDX_")
         return os.path.join(CACHE_DIR, f"{safe_ticker}_{period}_{interval}.json")
 
@@ -64,17 +86,26 @@ class StockDataEngine:
     ) -> Dict[str, Any]:
         """
         Fetches historical OHLCV data for a ticker with technical indicators.
-        Uses cached data if available and fresh, falls back to yfinance or realistic simulation.
+        Uses in-memory cache, disk cache if available, or falls back to yfinance or realistic simulation.
         """
         ticker = ticker.upper().strip()
-        cache_path = self._get_cache_path(ticker, period, interval)
+        cache_key = f"{ticker}_{period}_{interval}"
 
-        if not force_refresh and os.path.exists(cache_path):
+        # 1. Check in-memory cache
+        if not force_refresh and cache_key in self._mem_cache:
+            cached_entry = self._mem_cache[cache_key]
+            if time.time() - cached_entry.get("timestamp", 0) < self.cache_ttl:
+                return cached_entry["data"]
+
+        # 2. Check disk cache if available
+        cache_path = self._get_cache_path(ticker, period, interval)
+        if not force_refresh and cache_path and os.path.exists(cache_path):
             try:
                 with open(cache_path, "r") as f:
                     cached_payload = json.load(f)
                 cached_time = cached_payload.get("timestamp", 0)
                 if time.time() - cached_time < self.cache_ttl:
+                    self._mem_cache[cache_key] = cached_payload
                     return cached_payload["data"]
             except Exception as e:
                 logger.warning(f"Failed reading cache for {ticker}: {e}")
@@ -87,9 +118,9 @@ class StockDataEngine:
         if yf is not None:
             try:
                 import socket
-                socket.create_connection(("1.1.1.1", 53), timeout=0.4)
+                socket.create_connection(("query1.finance.yahoo.com", 443), timeout=1.0)
                 online = True
-            except OSError:
+            except (OSError, socket.timeout):
                 online = False
 
         # 1. Attempt yfinance fetch if online
@@ -112,12 +143,16 @@ class StockDataEngine:
 
         processed = self._process_dataframe(df, ticker, info)
 
-        # Cache results
-        try:
-            with open(cache_path, "w") as f:
-                json.dump({"timestamp": time.time(), "data": processed}, f)
-        except Exception as e:
-            logger.warning(f"Failed caching data for {ticker}: {e}")
+        # Cache results in memory
+        self._mem_cache[cache_key] = {"timestamp": time.time(), "data": processed}
+
+        # Cache results to disk if writable
+        if cache_path:
+            try:
+                with open(cache_path, "w") as f:
+                    json.dump({"timestamp": time.time(), "data": processed}, f)
+            except Exception as e:
+                logger.debug(f"Failed disk caching data for {ticker}: {e}")
 
         return processed
 

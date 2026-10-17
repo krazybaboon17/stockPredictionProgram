@@ -106,6 +106,56 @@ class TestAPIEndpoints(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.json()["status"], "online")
 
+        # Verify unified routing serves frontend root through serverless entrypoint
+        res_root = vercel_client.get("/")
+        self.assertEqual(res_root.status_code, 200)
+        self.assertIn(b"TimesFM", res_root.content)
+
+    def test_static_direct_routes(self):
+        res_css = self.client.get("/styles.css")
+        self.assertEqual(res_css.status_code, 200)
+        self.assertIn("text/css", res_css.headers.get("content-type", ""))
+
+        res_js = self.client.get("/app.js")
+        self.assertEqual(res_js.status_code, 200)
+        self.assertIn("javascript", res_js.headers.get("content-type", ""))
+
+    def test_task_creation_and_messaging_endpoints(self):
+        # Test task creation
+        res_create = self.client.post("/api/tasks/create", json={
+            "description": "Automated verification test task",
+            "from_role": "Tester",
+            "to_role": "Lead Developer",
+            "priority": "LOW"
+        })
+        self.assertEqual(res_create.status_code, 200)
+        self.assertTrue(res_create.json()["success"])
+
+        # Test message post
+        res_msg = self.client.post("/api/tasks/message", json={
+            "author": "Tester",
+            "message": "Verification message test"
+        })
+        self.assertEqual(res_msg.status_code, 200)
+        self.assertTrue(res_msg.json()["success"])
+
+        # Verify tasks reflects update
+        res_tasks = self.client.get("/api/tasks")
+        self.assertEqual(res_tasks.status_code, 200)
+        self.assertIn("Automated verification test task", res_tasks.json()["content"])
+        self.assertIn("Verification message test", res_tasks.json()["content"])
+
+    def test_readonly_data_engine_safety(self):
+        from engine.data_loader import StockDataEngine
+        # Initialize an engine with memory cache
+        engine = StockDataEngine()
+        data = engine.get_stock_data("AAPL", period="1mo", interval="1d")
+        self.assertIn("history", data)
+        self.assertIn("current_price", data)
+        # Fetching second time hits in-memory cache
+        cached = engine.get_stock_data("AAPL", period="1mo", interval="1d")
+        self.assertEqual(len(cached["history"]), len(data["history"]))
+
 
 if __name__ == "__main__":
     unittest.main()

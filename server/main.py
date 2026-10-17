@@ -47,6 +47,7 @@ data_engine = StockDataEngine()
 forecaster = TimesFMForecaster()
 
 TASKS_FILE = os.path.join(BASE_DIR, "TASKS.txt")
+_TASKS_CACHE_OVERRIDE: Optional[str] = None
 
 
 # --- Pydantic Schemas ---
@@ -331,30 +332,42 @@ async def get_risk_evaluation(
 
 
 @app.get("/api/tasks")
-
 async def get_tasks():
     """Reads TASKS.txt for real-time agent coordination."""
+    global _TASKS_CACHE_OVERRIDE
+    if _TASKS_CACHE_OVERRIDE is not None:
+        return {"content": _TASKS_CACHE_OVERRIDE}
+
     if not os.path.exists(TASKS_FILE):
         return {"content": "", "raw": "TASKS.txt not found."}
     
-    with open(TASKS_FILE, "r", encoding="utf-8") as f:
-        content = f.read()
+    try:
+        with open(TASKS_FILE, "r", encoding="utf-8") as f:
+            content = f.read()
+        return {"content": content}
+    except Exception as e:
+        return {"content": f"TASKS.txt read error: {e}"}
 
-    return {"content": content}
 
 @app.post("/api/tasks/create")
 async def create_task(req: NewTaskRequest):
     """Allows testers and PMs to append a task into TASKS.txt."""
-    if not os.path.exists(TASKS_FILE):
-        raise HTTPException(status_code=404, detail="TASKS.txt not found")
-
+    global _TASKS_CACHE_OVERRIDE
     import datetime
     now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     task_id = req.task_id or f"TASK-{int(datetime.datetime.now().timestamp()) % 10000:04d}"
     entry_line = f"[{task_id}] | {now_str} | {req.from_role} -> {req.to_role} | PENDING | {req.priority} | {req.description}\n"
 
-    with open(TASKS_FILE, "r", encoding="utf-8") as f:
-        text = f.read()
+    if _TASKS_CACHE_OVERRIDE is not None:
+        text = _TASKS_CACHE_OVERRIDE
+    elif os.path.exists(TASKS_FILE):
+        try:
+            with open(TASKS_FILE, "r", encoding="utf-8") as f:
+                text = f.read()
+        except Exception:
+            text = ""
+    else:
+        text = ""
 
     # Append under ACTIVE TASK QUEUE
     marker = "2. ACTIVE TASK QUEUE\n--------------------------------------------------------------------------------\n[Format: Task ID | Date | From -> To | Status | Priority | Description]\n"
@@ -364,44 +377,53 @@ async def create_task(req: NewTaskRequest):
     else:
         new_text = text + f"\n\n[NEW TASK - {now_str}]\n" + entry_line
 
+    _TASKS_CACHE_OVERRIDE = new_text
+
     try:
         with open(TASKS_FILE, "w", encoding="utf-8") as f:
             f.write(new_text)
     except (OSError, PermissionError) as e:
-        logger.warning(f"Could not write to TASKS.txt (read-only filesystem): {e}")
+        logger.info(f"TASKS.txt disk write skipped (read-only filesystem): {e}")
 
     return {"success": True, "task_id": task_id, "message": "Task queued successfully."}
+
 
 @app.post("/api/tasks/message")
 async def post_message(req: ChatMessageRequest):
     """Allows agents to post a communication log message into TASKS.txt."""
-    if not os.path.exists(TASKS_FILE):
-        raise HTTPException(status_code=404, detail="TASKS.txt not found")
-
+    global _TASKS_CACHE_OVERRIDE
     import datetime
     now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     entry = f"\n[{now_str}] [{req.author}]:\n{req.message}\n"
 
-    with open(TASKS_FILE, "r", encoding="utf-8") as f:
-        text = f.read()
+    if _TASKS_CACHE_OVERRIDE is not None:
+        text = _TASKS_CACHE_OVERRIDE
+    elif os.path.exists(TASKS_FILE):
+        try:
+            with open(TASKS_FILE, "r", encoding="utf-8") as f:
+                text = f.read()
+        except Exception:
+            text = ""
+    else:
+        text = ""
 
     # Append under section 4
     marker = "4. AGENT COMMUNICATION LOG\n--------------------------------------------------------------------------------"
     if marker in text:
         parts = text.split(marker)
-        # Find next section or append
         new_text = parts[0] + marker + entry + parts[1]
     else:
         new_text = text + entry
+
+    _TASKS_CACHE_OVERRIDE = new_text
 
     try:
         with open(TASKS_FILE, "w", encoding="utf-8") as f:
             f.write(new_text)
     except (OSError, PermissionError) as e:
-        logger.warning(f"Could not write to TASKS.txt (read-only filesystem): {e}")
+        logger.info(f"TASKS.txt disk write skipped (read-only filesystem): {e}")
 
     return {"success": True, "message": "Message logged to TASKS.txt."}
-
 
 
 # --- Static Frontend Mount ---
@@ -415,6 +437,20 @@ if os.path.exists(FRONTEND_DIR):
         if os.path.exists(index_file):
             return FileResponse(index_file)
         return JSONResponse({"status": "Frontend building..."})
+
+    @app.get("/styles.css")
+    async def serve_styles():
+        css_file = os.path.join(FRONTEND_DIR, "styles.css")
+        if os.path.exists(css_file):
+            return FileResponse(css_file, media_type="text/css")
+        raise HTTPException(status_code=404, detail="styles.css not found")
+
+    @app.get("/app.js")
+    async def serve_js():
+        js_file = os.path.join(FRONTEND_DIR, "app.js")
+        if os.path.exists(js_file):
+            return FileResponse(js_file, media_type="application/javascript")
+        raise HTTPException(status_code=404, detail="app.js not found")
 
 
 if __name__ == "__main__":

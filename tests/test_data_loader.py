@@ -41,6 +41,15 @@ class TestStockDataEngine(unittest.TestCase):
         for point in data["history"]:
             self.assertTrue(0 <= point["rsi"] <= 100, f"RSI out of bounds: {point['rsi']}")
 
+    def test_in_memory_and_resilient_caching(self):
+        # First call populates memory and disk cache
+        data1 = self.engine.get_stock_data("MSFT", period="1mo")
+        self.assertIn("history", data1)
+        # Second call hits memory cache
+        data2 = self.engine.get_stock_data("MSFT", period="1mo", force_refresh=False)
+        self.assertEqual(data1["ticker"], data2["ticker"])
+        self.assertEqual(len(data1["history"]), len(data2["history"]))
+
 
 if __name__ == "__main__":
     unittest.main()
