@@ -98,7 +98,16 @@ class TestAPIEndpoints(unittest.TestCase):
         self.assertIn("var_95_pct", data["risk_metrics"])
         self.assertIn("risk_tier", data["risk_metrics"])
 
+    def test_vercel_entrypoint(self):
+        from api.index import app as vercel_app
+        from fastapi.testclient import TestClient
+        vercel_client = TestClient(vercel_app)
+        res = vercel_client.get("/api/health")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()["status"], "online")
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

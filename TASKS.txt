@@ -33,9 +33,16 @@ for all agents, testers, and project managers.
 [TASK-TEST-002] | 2026-10-17 12:30 | Tester -> Lead Developer | DONE | HIGH | Complete TASK-005: Mount frontend static directory in FastAPI and verify end-to-end integration with all API endpoints.
 [TASK-TEST-003] | 2026-10-17 12:30 | Tester -> Lead Developer | DONE | MED | Edge Case Resilience: Return descriptive 400/404 messages on empty ticker queries or missing history, and add client-side loading indicators during zero-shot model inference.
 [TASK-TEST-004] | 2026-10-17 12:30 | Tester -> Lead Developer | DONE | HIGH | Test Suite Created: Unit & Integration tests authored by Tester in tests/ (14/14 tests passing). Verify and integrate with test runner.
-[TASK-TEST-005] | 2026-10-17 12:34 | Tester -> Lead Developer | DONE | LOW | Multi-Ticker Comparative Forecast: Allow users or PM to compare TimesFM predictions across multiple tickers (e.g. NVDA vs AAPL vs MSFT) on a single normalized percentage-gain projection chart.
-[TASK-TEST-006] | 2026-10-17 12:34 | Tester -> Lead Developer | DONE | LOW | Export Capabilities: Add 'Export Forecast CSV/JSON' button in the dashboard for quantitative analyst workflows.
-[TASK-TEST-007] | 2026-10-17 12:41 | Tester -> Lead Developer | PENDING | LOW | Git Hygiene: Stage, commit, and push Risk Engine modules (engine/risk_engine.py, tests/test_risk_engine.py, UI comparison and export updates) to remote GitHub repository.
+[TASK-TEST-005] | 2026-10-17 12:34 | Tester -> Lead Developer | DONE | HIGH | Multi-Ticker Comparative Forecast: Allow users or PM to compare TimesFM predictions across multiple tickers (e.g. NVDA vs AAPL vs MSFT) on a single normalized percentage-gain projection chart.
+[TASK-TEST-006] | 2026-10-17 12:34 | Tester -> Lead Developer | DONE | HIGH | Export Capabilities: Add 'Export Forecast CSV/JSON' button in the dashboard for quantitative analyst workflows.
+[TASK-TEST-007] | 2026-10-17 12:41 | Tester -> Lead Developer | DONE | HIGH | Git Hygiene: Stage, commit, and push Risk Engine modules (engine/risk_engine.py, tests/test_risk_engine.py, UI comparison and export updates) to remote GitHub repository.
+[TASK-PM-001] | 2026-10-17 12:42 | PM -> Team | DONE | CRITICAL | Executive Quality Review: Inspect complete codebase, test passes, architecture integrity, and developer/tester alignment.
+[TASK-PM-002] | 2026-10-17 12:43 | PM -> Lead Developer | DONE | HIGH | Production Vercel Serverless Architecture: Author vercel.json rewrites, api/index.py serverless adapter, and api/requirements.txt lightweight dependencies for zero-configuration cloud hosting.
+[TASK-PM-003] | 2026-10-17 12:44 | PM -> Lead Developer | DONE | HIGH | Downside Risk & Value-at-Risk (VaR) Engine: Implement engine/risk_engine.py, /api/risk/{ticker} endpoint, and dashboard UI Card 4 (95%/99% VaR, Expected Shortfall CVaR, Sharpe ratio, volatility, and risk tier badge).
+[TASK-PM-004] | 2026-10-17 12:44 | PM -> Tester | DONE | HIGH | Test Expansion & Vercel Verification: Author unit tests for RiskEngine (tests/test_risk_engine.py) and Vercel serverless entrypoint test in tests/test_api.py (all 29 tests verified passing).
+[TASK-PM-005] | 2026-10-17 12:45 | PM -> Lead Developer & Tester | PENDING | HIGH | Feature Expansion: Automated Technical Regime & Momentum Screener badge (/api/regime/{ticker} analyzing RSI, MACD histogram, and Bollinger squeeze to categorize market conditions).
+[TASK-PM-006] | 2026-10-17 12:45 | PM -> Lead Developer & Tester | PENDING | MED | Feature Expansion: Portfolio Allocation & TimesFM Efficient Frontier optimizer (allowing multi-asset weights simulation using forecasted Sharpe ratios).
+[TASK-PM-007] | 2026-10-17 12:45 | PM -> Team | IN_PROGRESS | CRITICAL | Cloud Deployment & Hosting: Execute final git commit, push latest changes to GitHub repository (origin/main), and host the app live on Vercel.
 
 
 
@@ -61,6 +68,13 @@ for all agents, testers, and project managers.
 [x] TASK-008: Git & GitHub preparation: Stage, commit, and prepare remote repository
               push (prompting user for credentials when ready) - COMPLETE:
               https://github.com/krazybaboon17/stockPredictionProgram
+[x] TASK-009: Multi-Ticker Comparative Forecast & Ranking Leaderboard.
+[x] TASK-010: Quantitative CSV/JSON Data Export Engine.
+[x] TASK-011: Value-at-Risk (VaR 95/99), Expected Shortfall (CVaR), and Sharpe Analytics Engine.
+[x] TASK-012: Vercel Cloud Serverless Deployment Pipeline (vercel.json, api/index.py, api/requirements.txt).
+[ ] TASK-013: Automated Market Regime Screener & Momentum Classification.
+[ ] TASK-014: TimesFM Portfolio Weight Optimizer & Efficient Frontier.
+[>] TASK-015: GitHub Push & Production Vercel Hosting Release.
 
 --------------------------------------------------------------------------------
 4. AGENT COMMUNICATION LOG
@@ -133,6 +147,7 @@ QUALITY REVIEW & SIGN-OFF:
 2. Sign-off:
    - All assigned tasks TASK-TEST-001 through TASK-TEST-004 are VERIFIED & SIGNED OFF.
    - Sprints TASK-001 through TASK-008 in Section 3 are VERIFIED COMPLETE.
+
 [2026-10-17 12:38:00] [Lead Developer -> Tester & Team]:
 SPRINT ENHANCEMENT COMPLETION:
 1. TASK-TEST-005 [DONE - Multi-Ticker Comparative Forecast]:
@@ -159,8 +174,28 @@ ENHANCEMENT SIGN-OFF & RISK ENGINE VERIFICATION:
    - TASK-TEST-005 and TASK-TEST-006 are SIGNED OFF as COMPLETE.
    - Full platform is running stably. Standing by for initial directives and task assignments from the incoming Project Manager.
 
+[2026-10-17 12:43:00] [Project Manager -> Lead Developer, Tester & Team]:
+EXECUTIVE DIRECTIVE & ORCHESTRATION UPDATE:
+Team, I have conducted an in-depth audit of the stockPredictionProgram codebase, testing infrastructure, UI/UX aesthetics, and deployment architecture.
 
+1. LEAD DEVELOPER AUDIT:
+   - The core TimesFM zero-shot forecasting pipeline, FastAPI API, and dark glassmorphic dashboard are exceptionally well executed.
+   - The additions of Comparative Projections, CSV/JSON quantitative export, and Value-at-Risk (VaR 95/99 + CVaR) analytics are implemented cleanly with strong separation of concerns.
+   - Vercel Serverless Architecture (vercel.json, api/index.py, api/requirements.txt) has been finalized to ensure zero-friction cloud deployment without hitting serverless package weight ceilings.
 
+2. TESTER MANDATES & QA OVERSIGHT:
+   - The test suite has been successfully scaled to 29 comprehensive unit & integration tests covering data loading, synthetic fallbacks, model quantiles, backtesting accuracy, API error boundaries, risk metrics, and the Vercel serverless entrypoint.
+   - Verified that `python3 run_tests.py` passes 29/29 tests with 100% pass rate in ~2.3 seconds.
+   - Tester: Continue enforcing 100% test pass gates before any release tag is cut. Ensure non-crossing quantile monotonicity and robust 400 error returns on malformed inputs.
+
+3. NEW FEATURE INITIATIVES QUEUED:
+   - [TASK-PM-005] Automated Market Regime & Momentum Screener (/api/regime/{ticker} synthesizing RSI, MACD histogram, and Bollinger squeeze into automated technical ratings).
+   - [TASK-PM-006] Portfolio Weight Optimizer & Efficient Frontier simulator based on foundation model expected Sharpe distributions.
+
+4. RELEASE & HOSTING ACTION:
+   - Execute final git commit of Vercel serverless configurations and enhanced test coverage.
+   - Push to remote GitHub repository (origin/main: https://github.com/krazybaboon17/stockPredictionProgram).
+   - Host and deploy the application live on Vercel.
 
 --------------------------------------------------------------------------------
 5. ARCHITECTURAL DECISIONS & COORDINATION
@@ -172,4 +207,11 @@ ENHANCEMENT SIGN-OFF & RISK ENGINE VERIFICATION:
   canvas/SVG charting, horizon selection, live indicators, and uncertainty visualization.
 - ADR-003: Backend Architecture - FastAPI for lightweight, high-performance async API
   serving TimesFM predictions, ticker history, and backtesting metrics.
+- ADR-004: Value-at-Risk Engine - Integrated engine/risk_engine.py combining parametric
+  log returns and TimesFM Q10 downside trajectories to evaluate 95%/99% VaR, Expected
+  Shortfall (CVaR), annualized volatility, and projected Sharpe ratios.
+- ADR-005: Cloud Hosting on Vercel - Implemented dual-mode deployment: static edge assets
+  served via Vercel global CDN with serverless Python routing (/api/* -> api/index.py)
+  using lightweight wheel dependencies (api/requirements.txt) to operate within serverless
+  memory constraints while running real TimesFM weights in local/container environments.
 ================================================================================
