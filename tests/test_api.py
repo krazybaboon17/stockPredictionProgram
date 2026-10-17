@@ -98,6 +98,20 @@ class TestAPIEndpoints(unittest.TestCase):
         self.assertIn("var_95_pct", data["risk_metrics"])
         self.assertIn("risk_tier", data["risk_metrics"])
 
+    def test_regime_endpoint(self):
+        res = self.client.get("/api/regime/NVDA")
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data["ticker"], "NVDA")
+        self.assertIn("regime", data)
+        self.assertIn("regime_color", data)
+        self.assertIn("confidence_score", data)
+        self.assertIn("metrics", data)
+
+        # Empty ticker validation
+        res_empty = self.client.get("/api/regime/%20")
+        self.assertEqual(res_empty.status_code, 400)
+
     def test_vercel_entrypoint(self):
         from api.index import app as vercel_app
         from fastapi.testclient import TestClient
@@ -121,29 +135,41 @@ class TestAPIEndpoints(unittest.TestCase):
         self.assertIn("javascript", res_js.headers.get("content-type", ""))
 
     def test_task_creation_and_messaging_endpoints(self):
-        # Test task creation
-        res_create = self.client.post("/api/tasks/create", json={
-            "description": "Automated verification test task",
-            "from_role": "Tester",
-            "to_role": "Lead Developer",
-            "priority": "LOW"
-        })
-        self.assertEqual(res_create.status_code, 200)
-        self.assertTrue(res_create.json()["success"])
+        import server.main as sm
+        import os
+        original_content = None
+        if os.path.exists(sm.TASKS_FILE):
+            with open(sm.TASKS_FILE, "r", encoding="utf-8") as f:
+                original_content = f.read()
+        try:
+            # Test task creation
+            res_create = self.client.post("/api/tasks/create", json={
+                "description": "Automated verification test task",
+                "from_role": "Tester",
+                "to_role": "Lead Developer",
+                "priority": "LOW"
+            })
+            self.assertEqual(res_create.status_code, 200)
+            self.assertTrue(res_create.json()["success"])
 
-        # Test message post
-        res_msg = self.client.post("/api/tasks/message", json={
-            "author": "Tester",
-            "message": "Verification message test"
-        })
-        self.assertEqual(res_msg.status_code, 200)
-        self.assertTrue(res_msg.json()["success"])
+            # Test message post
+            res_msg = self.client.post("/api/tasks/message", json={
+                "author": "Tester",
+                "message": "Verification message test"
+            })
+            self.assertEqual(res_msg.status_code, 200)
+            self.assertTrue(res_msg.json()["success"])
 
-        # Verify tasks reflects update
-        res_tasks = self.client.get("/api/tasks")
-        self.assertEqual(res_tasks.status_code, 200)
-        self.assertIn("Automated verification test task", res_tasks.json()["content"])
-        self.assertIn("Verification message test", res_tasks.json()["content"])
+            # Verify tasks reflects update
+            res_tasks = self.client.get("/api/tasks")
+            self.assertEqual(res_tasks.status_code, 200)
+            self.assertIn("Automated verification test task", res_tasks.json()["content"])
+            self.assertIn("Verification message test", res_tasks.json()["content"])
+        finally:
+            sm._TASKS_CACHE_OVERRIDE = None
+            if original_content is not None and os.path.exists(sm.TASKS_FILE):
+                with open(sm.TASKS_FILE, "w", encoding="utf-8") as f:
+                    f.write(original_content)
 
     def test_readonly_data_engine_safety(self):
         from engine.data_loader import StockDataEngine
@@ -155,6 +181,21 @@ class TestAPIEndpoints(unittest.TestCase):
         # Fetching second time hits in-memory cache
         cached = engine.get_stock_data("AAPL", period="1mo", interval="1d")
         self.assertEqual(len(cached["history"]), len(data["history"]))
+
+    def test_regime_endpoint(self):
+        res = self.client.get("/api/regime/NVDA")
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data["ticker"], "NVDA")
+        self.assertIn("regime", data)
+        self.assertIn("regime_color", data)
+        self.assertIn("confidence_score", data)
+        self.assertIn("metrics", data)
+        self.assertIn("summary", data)
+
+        # Empty ticker validation
+        res_empty = self.client.get("/api/regime/%20")
+        self.assertEqual(res_empty.status_code, 400)
 
 
 if __name__ == "__main__":

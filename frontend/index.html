@@ -149,6 +149,7 @@
               <h1 id="stockSymbol" class="text-3xl font-extrabold tracking-tight text-white font-mono">NVDA</h1>
               <span id="stockName" class="text-base text-slate-400 font-medium">NVIDIA Corporation</span>
               <span id="stockSector" class="text-xs px-2.5 py-0.5 rounded-full bg-surface-800 border border-surface-700 text-slate-300">Technology</span>
+              <span id="heroRegimeBadge" class="text-xs px-2.5 py-0.5 rounded-full font-mono font-bold bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">Bullish Expansion</span>
             </div>
             <div class="flex items-baseline gap-3 mt-2">
               <span id="currentPrice" class="text-4xl font-extrabold font-mono tracking-tight text-white">$0.00</span>
@@ -368,14 +369,24 @@
           </div>
         </div>
 
-        <!-- Card 3: Technical Indicators Gauges -->
+        <!-- Card 3: Technical Indicators Gauges & Regime Screener -->
         <div class="glass-panel rounded-2xl p-5 space-y-3">
           <div class="flex items-center justify-between">
             <h3 class="text-xs font-mono uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-              <i data-lucide="gauge" class="w-3.5 h-3.5 text-accent-purple"></i> Market Condition Gauges
+              <i data-lucide="gauge" class="w-3.5 h-3.5 text-accent-purple"></i> Market Regime & Gauges
             </h3>
-            <span class="text-[10px] font-mono text-slate-500">Daily Technicals</span>
+            <span id="regimeBadge" class="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">Bullish Expansion</span>
           </div>
+
+          <!-- Regime Summary Microcard -->
+          <div id="regimeSummaryCard" class="p-2.5 rounded-xl bg-surface-900/80 border border-surface-800 text-[11px] text-slate-300 font-sans leading-relaxed">
+            <div class="flex items-center justify-between font-mono text-[10px] text-slate-400 mb-1">
+              <span>CONVICTION: <strong id="regimeConfidenceText" class="text-white">88%</strong></span>
+              <span id="regimeTrendText" class="text-emerald-400 font-bold">BULLISH TREND</span>
+            </div>
+            <p id="regimeSummaryText" class="line-clamp-2 text-slate-300 text-[11px]">Evaluating technical regime momentum...</p>
+          </div>
+
           <div class="space-y-3">
             <!-- RSI Gauge -->
             <div>

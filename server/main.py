@@ -23,6 +23,7 @@ if BASE_DIR not in sys.path:
 from engine.data_loader import StockDataEngine, POPULAR_TICKERS
 from engine.model_wrapper import TimesFMForecaster
 from engine.risk_engine import RiskEngine
+from engine.regime_engine import RegimeEngine
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("server")
@@ -329,6 +330,30 @@ async def get_risk_evaluation(
         "current_price": current_price,
         "risk_metrics": risk_metrics
     }
+
+
+@app.get("/api/regime/{ticker}")
+async def get_market_regime(ticker: str):
+    """
+    Automated Market Regime & Momentum Screener endpoint.
+    Categorizes ticker market condition into Bullish Expansion, Bearish Breakdown,
+    Overbought Exhaustion, or Squeeze Consolidation with conviction score and metrics.
+    """
+    cleaned = ticker.strip().upper()
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="Ticker symbol cannot be empty")
+
+    try:
+        stock_data = data_engine.get_stock_data(cleaned, period="1y")
+    except Exception as e:
+        logger.error(f"Error fetching data for regime screener {cleaned}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    if not stock_data or not stock_data.get("history"):
+        raise HTTPException(status_code=404, detail=f"No market data available for ticker '{cleaned}'")
+
+    regime_data = RegimeEngine.classify_regime(stock_data)
+    return regime_data
 
 
 @app.get("/api/tasks")

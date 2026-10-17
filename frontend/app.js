@@ -202,11 +202,12 @@ async function loadStock(ticker, forceRefresh = false) {
     document.getElementById("stat52Low").textContent = currentStockData.week_52_low ? `$${currentStockData.week_52_low.toFixed(2)}` : '--';
     document.getElementById("statPoints").textContent = currentStockData.data_points || '--';
 
-    // Fetch TimesFM Forecast, Backtest & Risk Metrics concurrently
+    // Fetch TimesFM Forecast, Backtest, Risk Metrics & Market Regime concurrently
     await Promise.all([
       fetchPrediction(),
       fetchBacktest(),
-      fetchRiskMetrics()
+      fetchRiskMetrics(),
+      fetchRegime()
     ]);
 
   } catch (err) {
@@ -307,6 +308,48 @@ async function fetchRiskMetrics() {
 
   } catch (e) {
     console.error("Risk metrics error:", e);
+  }
+}
+
+async function fetchRegime() {
+  try {
+    const res = await fetch(`/api/regime/${currentTicker}`);
+    if (!res.ok) return;
+    const regime = await res.json();
+    if (!regime) return;
+
+    const heroBadge = document.getElementById("heroRegimeBadge");
+    const cardBadge = document.getElementById("regimeBadge");
+    const summaryText = document.getElementById("regimeSummaryText");
+    const confText = document.getElementById("regimeConfidenceText");
+    const trendText = document.getElementById("regimeTrendText");
+
+    const color = regime.regime_color || "#10b981";
+
+    if (heroBadge) {
+      heroBadge.textContent = regime.regime;
+      heroBadge.style.color = color;
+      heroBadge.style.backgroundColor = `${color}20`;
+      heroBadge.style.borderColor = `${color}40`;
+    }
+    if (cardBadge) {
+      cardBadge.textContent = regime.regime;
+      cardBadge.style.color = color;
+      cardBadge.style.backgroundColor = `${color}20`;
+      cardBadge.style.borderColor = `${color}40`;
+    }
+    if (summaryText) {
+      summaryText.textContent = regime.summary;
+    }
+    if (confText) {
+      confText.textContent = `${Math.round(regime.confidence_score * 100)}%`;
+    }
+    if (trendText && regime.metrics) {
+      trendText.textContent = `${regime.metrics.trend_direction.toUpperCase()} TREND`;
+      trendText.style.color = color;
+    }
+  } catch (e) {
+    console.error("Regime fetch error:", e);
   }
 }
 
