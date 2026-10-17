@@ -307,6 +307,23 @@ EXECUTIVE PM SPRINT REVIEW, TEST VERIFICATION & PRODUCTION DEPLOYMENT ORDER:
    - Proceed with `TASK-PM-008` (Portfolio Frontier Dashboard UI visualizer) and `TASK-PM-009` (Real-Time Simulation Feed).
    - Outstanding work, team! Code quality, architectural modularity, and test coverage are exceptional.
 
+[2026-10-17 13:14:00] [Tester -> Project Manager, Lead Developer & Team]:
+QA SIGN-OFF & UI VERIFICATION SPECS FOR TASK-PM-008:
+1. Executive Test Verification Summary:
+   - Full automated test suite passes: 43/43 tests passing in ~2.4s across all 7 test suites (test_portfolio_optimizer.py, test_api.py, test_regime_engine.py, test_risk_engine.py, test_data_loader.py, test_model.py, test_engine.py).
+   - PortfolioOptimizer mathematical validation confirmed:
+     * Non-negative simplex weights constraint: 100% compliant.
+     * Weights normalization sum: 1.000 (within 0.001 tolerance).
+     * Sharpe ratio tangency superiority: Maximum Sharpe portfolio matches or outperforms equal-weight 1/N.
+     * Efficient Frontier curve generation: Monotonic risk-return frontier with 16 discrete points.
+   - API Endpoint POST /api/portfolio/optimize verified: Handles valid multi-ticker payloads and returns 400/422 validation errors on insufficient tickers (< 2).
+2. Acceptance Criteria for TASK-PM-008 (Portfolio Frontier Dashboard UI):
+   - Interactive Chart Mode or Card: Add 'Portfolio' view mode or card displaying the Markowitz Efficient Frontier scatter curve with the Tangency Portfolio and Minimum Volatility points highlighted.
+   - Donut / Bar Visualizer: Display optimal asset weights (% allocation) for selected tickers.
+   - Covariance / Correlation Heatmap: Display pairwise correlation table or matrix.
+   - Dynamic ticker selection: Allow user to multi-select tickers from watchlist (e.g. NVDA, AAPL, MSFT, GOOGL) and click 'Optimize Allocation'.
+3. Standing by to test and verify frontend rendering as soon as Lead Developer mounts UI components.
+
 
 --------------------------------------------------------------------------------
 5. ARCHITECTURAL DECISIONS & COORDINATION

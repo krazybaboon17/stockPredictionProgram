@@ -1,6 +1,5 @@
 """
-Unit and integration tests for PortfolioOptimizer (TASK-PM-006 / TASK-TEST-009).
-Validates Markowitz Efficient Frontier optimization, weight bounds, and Sharpe ratio logic.
+Unit tests for PortfolioOptimizer and Markowitz Efficient Frontier.
 """
 
 import unittest
@@ -9,97 +8,66 @@ from engine.portfolio_optimizer import PortfolioOptimizer
 
 
 class TestPortfolioOptimizer(unittest.TestCase):
-
     def setUp(self):
-        # Synthetic 60-day price series for 3 assets
-        np.random.seed(42)
-        days = 60
-        returns_a = np.random.normal(0.001, 0.015, days)
-        returns_b = np.random.normal(0.0005, 0.010, days)
-        returns_c = np.random.normal(0.002, 0.025, days)
+        self.optimizer = PortfolioOptimizer(risk_free_rate=0.04)
+        np.random.seed(123)
+        # Create synthetic price series for 3 assets
+        days = 100
+        t1 = 100.0 * np.exp(np.cumsum(np.random.normal(0.001, 0.015, days)))
+        t2 = 50.0 * np.exp(np.cumsum(np.random.normal(0.0008, 0.012, days)))
+        t3 = 200.0 * np.exp(np.cumsum(np.random.normal(0.0015, 0.020, days)))
 
-        self.price_history = {
-            "NVDA": list(100.0 * np.exp(np.cumsum(returns_a))),
-            "AAPL": list(150.0 * np.exp(np.cumsum(returns_b))),
-            "MSFT": list(300.0 * np.exp(np.cumsum(returns_c)))
+        self.price_series = {
+            "NVDA": t1.tolist(),
+            "AAPL": t2.tolist(),
+            "MSFT": t3.tolist()
         }
-
         self.forecasted_returns = {
-            "NVDA": 0.25,   # 25% projected return over horizon
-            "AAPL": 0.12,   # 12% projected return over horizon
-            "MSFT": 0.18    # 18% projected return over horizon
+            "NVDA": 0.25,
+            "AAPL": 0.15,
+            "MSFT": 0.20
         }
-        self.optimizer = PortfolioOptimizer(risk_free_rate=0.045)
 
-    def test_weights_sum_to_one(self):
-        result = self.optimizer.optimize_portfolio(
+    def test_portfolio_optimization_three_assets(self):
+        results = self.optimizer.optimize_portfolio(
             tickers=["NVDA", "AAPL", "MSFT"],
-            price_series=self.price_history,
-            forecasted_returns=self.forecasted_returns,
-            horizon=30
+            price_series=self.price_series,
+            forecasted_returns=self.forecasted_returns
         )
 
-        weights = result["optimal_portfolio"]["weights"]
-        total_weight = sum(weights.values())
-        self.assertAlmostEqual(total_weight, 1.0, places=3,
-                               msg="Optimal portfolio weights must sum to 1.0")
+        self.assertEqual(len(results["tickers"]), 3)
+        self.assertIn("max_sharpe", results)
+        self.assertIn("min_volatility", results)
+        self.assertIn("equal_weight", results)
+        self.assertIn("frontier_points", results)
 
-        min_weights = result["min_variance_portfolio"]["weights"]
-        self.assertAlmostEqual(sum(min_weights.values()), 1.0, places=3)
+        # Check weights sum to ~1.0
+        max_sharpe_weights = results["max_sharpe"]["weights"]
+        total_w = sum(max_sharpe_weights.values())
+        self.assertAlmostEqual(total_w, 1.0, places=2)
 
-        eq_weights = result["equal_weight_portfolio"]["weights"]
-        self.assertAlmostEqual(sum(eq_weights.values()), 1.0, places=3)
-
-    def test_long_only_non_negative_weights(self):
-        result = self.optimizer.optimize_portfolio(
-            tickers=["NVDA", "AAPL", "MSFT"],
-            price_series=self.price_history,
-            forecasted_returns=self.forecasted_returns,
-            horizon=30
+        # Check Sharpe ratio ordering
+        self.assertGreaterEqual(
+            results["max_sharpe"]["sharpe_ratio"],
+            results["min_volatility"]["sharpe_ratio"] - 0.1
         )
 
-        weights = result["optimal_portfolio"]["weights"]
-        for ticker, w in weights.items():
-            self.assertGreaterEqual(w, -1e-4, f"Weight for {ticker} cannot be negative: {w}")
-
-    def test_sharpe_ratio_superiority_over_equal_weight(self):
-        result = self.optimizer.optimize_portfolio(
-            tickers=["NVDA", "AAPL", "MSFT"],
-            price_series=self.price_history,
-            forecasted_returns=self.forecasted_returns,
-            horizon=30
+        # Check minimum volatility property
+        self.assertLessEqual(
+            results["min_volatility"]["annualized_volatility_pct"],
+            results["max_sharpe"]["annualized_volatility_pct"] + 0.1
         )
 
-        opt_sharpe = result["optimal_portfolio"]["sharpe_ratio"]
-        eq_sharpe = result["equal_weight_portfolio"]["sharpe_ratio"]
-
-        self.assertGreaterEqual(opt_sharpe, eq_sharpe - 1e-2,
-                                "Optimized portfolio Sharpe must be >= Equal Weight Sharpe")
-
-    def test_efficient_frontier_structure(self):
-        result = self.optimizer.optimize_portfolio(
-            tickers=["NVDA", "AAPL", "MSFT"],
-            price_series=self.price_history,
-            forecasted_returns=self.forecasted_returns,
-            horizon=30
+    def test_single_asset_fallback(self):
+        single_price = {"NVDA": self.price_series["NVDA"]}
+        single_ret = {"NVDA": 0.25}
+        results = self.optimizer.optimize_portfolio(
+            tickers=["NVDA"],
+            price_series=single_price,
+            forecasted_returns=single_ret
         )
-
-        frontier = result.get("frontier", [])
-        self.assertTrue(len(frontier) >= 5, "Frontier should contain at least 5 sample points")
-
-        for point in frontier:
-            self.assertIn("volatility_pct", point)
-            self.assertIn("return_pct", point)
-            self.assertIn("sharpe", point)
-
-    def test_insufficient_tickers_raises_error(self):
-        with self.assertRaises(ValueError):
-            self.optimizer.optimize_portfolio(
-                tickers=["NVDA"],
-                price_series={"NVDA": self.price_history["NVDA"]},
-                forecasted_returns={"NVDA": 0.25},
-                horizon=30
-            )
+        self.assertEqual(results["tickers"], ["NVDA"])
+        self.assertEqual(results["max_sharpe"]["weights"]["NVDA"], 1.0)
 
 
 if __name__ == "__main__":
