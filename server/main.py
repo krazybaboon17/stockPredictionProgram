@@ -24,6 +24,7 @@ from engine.data_loader import StockDataEngine, POPULAR_TICKERS
 from engine.model_wrapper import TimesFMForecaster
 from engine.risk_engine import RiskEngine
 from engine.regime_engine import RegimeEngine
+from engine.portfolio_optimizer import PortfolioOptimizer
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("server")
@@ -61,6 +62,11 @@ class CompareRequest(BaseModel):
     tickers: List[str] = Field(..., min_length=1, max_length=8, description="List of tickers to compare")
     horizon: int = Field(30, ge=1, le=90, description="Forecast horizon in trading days")
     period: str = Field("2y", description="Historical period")
+
+class PortfolioRequest(BaseModel):
+    tickers: List[str] = Field(..., min_length=2, max_length=8, description="List of at least 2 tickers")
+    horizon: int = Field(30, ge=7, le=90, description="Forecast horizon in trading days")
+    risk_free_rate: float = Field(0.045, ge=0.0, le=0.20, description="Annual risk-free rate")
 
 class BacktestRequest(BaseModel):
     ticker: str = Field(..., example="NVDA")
@@ -354,6 +360,59 @@ async def get_market_regime(ticker: str):
 
     regime_data = RegimeEngine.classify_regime(stock_data)
     return regime_data
+
+
+@app.post("/api/portfolio/optimize")
+async def optimize_portfolio_endpoint(req: PortfolioRequest):
+    """
+    Computes Markowitz Efficient Frontier, Maximum Sharpe Portfolio,
+    and Minimum Volatility weights across selected assets.
+    """
+    cleaned_tickers = [t.strip().upper() for t in req.tickers if t and t.strip()]
+    if len(cleaned_tickers) < 2:
+        raise HTTPException(status_code=400, detail="At least 2 valid tickers are required for portfolio optimization.")
+
+    price_series = {}
+    forecasted_returns = {}
+
+    for ticker in cleaned_tickers:
+        try:
+            stock = data_engine.get_stock_data(ticker, period="2y")
+            history = stock.get("history", [])
+            if not history or len(history) < 15:
+                raise HTTPException(status_code=404, detail=f"Insufficient historical data for '{ticker}'")
+            prices = [float(h["close"]) for h in history]
+            price_series[ticker] = prices
+
+            # Forecast return using TimesFM
+            last_date = history[-1]["date"]
+            fc = forecaster.forecast_series(prices, horizon=req.horizon, start_date_str=last_date)
+            preds = fc.get("predictions", [])
+            if preds and prices[-1] > 0:
+                final_pred = float(preds[-1]["predicted"])
+                ret = (final_pred - prices[-1]) / prices[-1]
+                forecasted_returns[ticker] = ret
+            else:
+                forecasted_returns[ticker] = 0.0
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error fetching data for ticker {ticker}: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed loading data for {ticker}: {str(e)}")
+
+    try:
+        optimizer = PortfolioOptimizer(risk_free_rate=req.risk_free_rate)
+        results = optimizer.optimize_portfolio(
+            tickers=cleaned_tickers,
+            price_series=price_series,
+            forecasted_returns=forecasted_returns,
+            horizon=req.horizon
+        )
+        return results
+    except Exception as e:
+        logger.error(f"Portfolio optimization failure: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
 
 
 @app.get("/api/tasks")

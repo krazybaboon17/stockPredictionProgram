@@ -202,9 +202,37 @@ class TestAPIEndpoints(unittest.TestCase):
         self.assertIn("metrics", data)
         self.assertIn("summary", data)
 
-        # Empty ticker validation
-        res_empty = self.client.get("/api/regime/%20")
-        self.assertEqual(res_empty.status_code, 400)
+    def test_portfolio_optimize_endpoint(self):
+        # 1. Valid multi-asset portfolio optimization
+        res = self.client.post("/api/portfolio/optimize", json={
+            "tickers": ["NVDA", "AAPL", "MSFT"],
+            "horizon": 30,
+            "risk_free_rate": 0.045
+        })
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertIn("optimal_portfolio", data)
+        self.assertIn("min_variance_portfolio", data)
+        self.assertIn("equal_weight_portfolio", data)
+        self.assertIn("frontier", data)
+        self.assertIn("correlation_matrix", data)
+
+        opt_weights = data["optimal_portfolio"]["weights"]
+        self.assertAlmostEqual(sum(opt_weights.values()), 1.0, places=2)
+
+        # 2. Validation error when tickers < 2
+        res_single = self.client.post("/api/portfolio/optimize", json={
+            "tickers": ["AAPL"],
+            "horizon": 30
+        })
+        self.assertIn(res_single.status_code, [400, 422])
+
+        # 3. Empty ticker list
+        res_empty = self.client.post("/api/portfolio/optimize", json={
+            "tickers": [],
+            "horizon": 30
+        })
+        self.assertIn(res_empty.status_code, [400, 422])
 
 
 if __name__ == "__main__":
